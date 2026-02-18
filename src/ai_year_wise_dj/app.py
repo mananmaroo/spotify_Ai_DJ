@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 
 from ai_year_wise_dj.analysis import build_track_fingerprint
-from ai_year_wise_dj.config import load_local_env_file
 from ai_year_wise_dj.matcher import best_transition
 from ai_year_wise_dj.spotify_service import SpotifyService
 
@@ -24,7 +23,6 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    load_local_env_file()
     service = SpotifyService()
 
     seed_track, seed_features, seed_analysis = service.hydrate_track(args.seed_track_id)

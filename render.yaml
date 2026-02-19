@@ -6,7 +6,7 @@ services:
     buildCommand: |
       pip install --upgrade pip
       pip install -e .
-    startCommand: python -m ai_year_wise_dj.api
+    startCommand: uvicorn ai_year_wise_dj.api:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: SPOTIPY_CLIENT_ID
         sync: false

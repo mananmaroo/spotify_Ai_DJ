@@ -5,6 +5,7 @@ import warnings
 from typing import Iterable
 
 import spotipy
+from spotipy.exceptions import SpotifyException
 from spotipy.oauth2 import SpotifyClientCredentials
 from requests.exceptions import HTTPError
 
@@ -58,8 +59,9 @@ class SpotifyService:
         try:
             result = self.client.audio_features([track_id])[0]
             return result or {}
-        except HTTPError as exc:
-            if exc.response is not None and exc.response.status_code == 403:
+        except (HTTPError, SpotifyException) as exc:
+            status = exc.response.status_code if isinstance(exc, HTTPError) else exc.http_status
+            if status == 403:
                 warnings.warn(
                     "Spotify audio-features endpoint returned 403 Forbidden. "
                     "This endpoint may be restricted for your app credentials. "
@@ -73,8 +75,9 @@ class SpotifyService:
     def _safe_audio_analysis(self, track_id: str) -> dict:
         try:
             return self.client.audio_analysis(track_id)
-        except HTTPError as exc:
-            if exc.response is not None and exc.response.status_code == 403:
+        except (HTTPError, SpotifyException) as exc:
+            status = exc.response.status_code if isinstance(exc, HTTPError) else exc.http_status
+            if status == 403:
                 warnings.warn(
                     "Spotify audio-analysis endpoint returned 403 Forbidden. "
                     "This endpoint may be restricted for your app credentials. "

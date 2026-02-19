@@ -17,3 +17,4 @@ src/ai_year_wise_dj.egg-info/top_level.txt
 tests/test_app.py
 tests/test_config.py
 tests/test_matcher.py
+tests/test_spotify_service.py

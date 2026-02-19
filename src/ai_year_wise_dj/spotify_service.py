@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import os
+import warnings
 from typing import Iterable
 
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
+from requests.exceptions import HTTPError
 
 
 class SpotifyService:
@@ -48,9 +50,40 @@ class SpotifyService:
 
     def hydrate_track(self, track_id: str) -> tuple[dict, dict, dict]:
         track = self.client.track(track_id)
-        features = self.client.audio_features([track_id])[0] or {}
-        analysis = self.client.audio_analysis(track_id)
+        features = self._safe_audio_features(track_id)
+        analysis = self._safe_audio_analysis(track_id)
         return track, features, analysis
+
+    def _safe_audio_features(self, track_id: str) -> dict:
+        try:
+            result = self.client.audio_features([track_id])[0]
+            return result or {}
+        except HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 403:
+                warnings.warn(
+                    "Spotify audio-features endpoint returned 403 Forbidden. "
+                    "This endpoint may be restricted for your app credentials. "
+                    "Falling back to empty features.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                return {}
+            raise
+
+    def _safe_audio_analysis(self, track_id: str) -> dict:
+        try:
+            return self.client.audio_analysis(track_id)
+        except HTTPError as exc:
+            if exc.response is not None and exc.response.status_code == 403:
+                warnings.warn(
+                    "Spotify audio-analysis endpoint returned 403 Forbidden. "
+                    "This endpoint may be restricted for your app credentials. "
+                    "Falling back to empty analysis.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                return {}
+            raise
 
     def hydrate_tracks(self, track_ids: Iterable[str]) -> list[tuple[dict, dict, dict]]:
         hydrated: list[tuple[dict, dict, dict]] = []

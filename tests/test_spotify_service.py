@@ -171,6 +171,33 @@ class SearchTracksTests(unittest.TestCase):
         self.assertIsNotNone(called_limit)
         self.assertLessEqual(called_limit, SpotifyService._SEARCH_PAGE_LIMIT)
 
+    def test_search_passes_market_parameter(self) -> None:
+        """search calls must include a non-None market to avoid Spotify 400 errors."""
+        svc = _make_service()
+        svc.client.search = MagicMock(return_value={"tracks": {"items": []}})
+
+        svc.search_tracks_by_year_window(year=2020, window=5, limit=20)
+
+        call_args = svc.client.search.call_args
+        called_market = call_args.kwargs.get("market")
+        self.assertIsNotNone(called_market)
+        self.assertIsInstance(called_market, str)
+        self.assertGreater(len(called_market), 0)
+
+    def test_find_starting_track_passes_market_parameter(self) -> None:
+        """find_starting_track must pass a non-None market to avoid Spotify 400 errors."""
+        svc = _make_service()
+        fake_track = {"id": "t1", "name": "Song"}
+        svc.client.search = MagicMock(return_value={"tracks": {"items": [fake_track]}})
+
+        svc.find_starting_track("Song", year=2020)
+
+        call_args = svc.client.search.call_args
+        called_market = call_args.kwargs.get("market")
+        self.assertIsNotNone(called_market)
+        self.assertIsInstance(called_market, str)
+        self.assertGreater(len(called_market), 0)
+
     def test_search_returns_empty_list_on_400_http_error(self) -> None:
         svc = _make_service()
         svc.client.search = MagicMock(side_effect=_make_400_http_error())

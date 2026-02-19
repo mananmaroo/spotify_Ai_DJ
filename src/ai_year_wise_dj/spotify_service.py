@@ -11,9 +11,12 @@ from requests.exceptions import HTTPError
 
 
 class SpotifyService:
+    _DEFAULT_MARKET = "US"
+
     def __init__(self) -> None:
         self._validate_credentials()
         self.client = spotipy.Spotify(auth_manager=SpotifyClientCredentials())
+        self.market = os.getenv("SPOTIFY_MARKET", self._DEFAULT_MARKET)
 
     @staticmethod
     def _validate_credentials() -> None:
@@ -40,7 +43,7 @@ class SpotifyService:
         while len(tracks) < limit:
             page_size = min(self._SEARCH_PAGE_LIMIT, limit - len(tracks))
             try:
-                page = self.client.search(q=query, type="track", limit=page_size, offset=offset)
+                page = self.client.search(q=query, type="track", limit=page_size, offset=offset, market=self.market)
             except (HTTPError, SpotifyException) as exc:
                 status = exc.response.status_code if isinstance(exc, HTTPError) else exc.http_status
                 if status == 400:
@@ -63,7 +66,7 @@ class SpotifyService:
         min_year = year - window
         max_year = year + window
         query = f"track:{query_text} year:{min_year}-{max_year}"
-        page = self.client.search(q=query, type="track", limit=1, offset=0)
+        page = self.client.search(q=query, type="track", limit=1, offset=0, market=self.market)
         items = page.get("tracks", {}).get("items", [])
         return items[0] if items else None
 

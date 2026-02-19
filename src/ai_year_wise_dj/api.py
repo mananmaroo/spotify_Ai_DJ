@@ -26,8 +26,6 @@ class TrackSearchRequest(BaseModel):
     """Request to search for a track by name and artist."""
     track_name: str
     artist_name: str
-    year: int = 2018
-    window: int = 2
     limit: int = 20
 
 class TrackInfo(BaseModel):
@@ -39,6 +37,7 @@ class TrackInfo(BaseModel):
     popularity: int = 0
     duration_ms: int = 0
     preview_url: str = None
+    genres: list[str] = []
 
 class DJResponse(BaseModel):
     """Response with starting track and next recommendations."""
@@ -90,11 +89,17 @@ def health_check():
     """Health check endpoint."""
     return {"status": "ok"}
 
+_DEFAULT_YEAR_WINDOW = 3
+_POPULARITY_WEIGHT = 0.5
+_DURATION_WEIGHT = 0.3
+_YEAR_WEIGHT = 0.2
+
+
 @app.post("/api/search", response_model=DJResponse)
 def search_and_get_transitions(request: TrackSearchRequest):
     """
     Search for a track by name and artist, then find transition matches using
-    metadata (popularity, duration) — no restricted audio-features endpoint needed.
+    the seed track's own year and genre — no user-provided year/window needed.
     """
     try:
         sp = get_spotify_client()
@@ -108,31 +113,52 @@ def search_and_get_transitions(request: TrackSearchRequest):
                 status_code=404,
                 detail=f"Track '{request.track_name}' by '{request.artist_name}' not found"
             )
-        
+
         start_track = results["tracks"]["items"][0]
         track_id = start_track["id"]
         seed_popularity = start_track.get("popularity", 50)
         seed_duration_ms = start_track.get("duration_ms", 0)
         seed_year = int(start_track["album"]["release_date"][:4])
-        
-        # Search for tracks from the target year within the window
-        search_query = f"year:{request.year - request.window}-{request.year + request.window}"
-        candidates = sp.search(q=search_query, type="track", limit=request.limit)
-        
+
+        # Fetch artist genres so we can find musically similar tracks
+        seed_genres: list[str] = []
+        if start_track.get("artists"):
+            artist_id = start_track["artists"][0]["id"]
+            artist_info = sp.artist(artist_id)
+            seed_genres = artist_info.get("genres", [])
+
+        # Build a candidate search query from the seed track's year (± window)
+        # and its primary genre when available.
+        year_range = f"{seed_year - _DEFAULT_YEAR_WINDOW}-{seed_year + _DEFAULT_YEAR_WINDOW}"
+        if seed_genres:
+            primary_genre = f'"{seed_genres[0]}"'
+            search_query = f"genre:{primary_genre} year:{year_range}"
+        else:
+            search_query = f"year:{year_range}"
+
+        candidates_result = sp.search(q=search_query, type="track", limit=request.limit)
+        candidate_items = candidates_result["tracks"]["items"]
+
+        # If the genre-filtered search returned nothing, fall back to year-only
+        if not candidate_items and seed_genres:
+            fallback_result = sp.search(q=f"year:{year_range}", type="track", limit=request.limit)
+            candidate_items = fallback_result["tracks"]["items"]
+
         # Rank candidates using metadata (popularity gradient + duration proximity).
         # This avoids the restricted /v1/audio-features endpoint.
         next_tracks = []
-        for track in candidates["tracks"]["items"]:
+        for track in candidate_items:
             if track["id"] == track_id:
                 continue
             track_popularity = track.get("popularity", 50)
             track_duration_ms = track.get("duration_ms", 0)
             release_date = track["album"].get("release_date", "0000")
             track_year = int(release_date[:4]) if release_date else 0
-            # Lower penalty = better match
             popularity_penalty = abs(seed_popularity - track_popularity) / 100.0
             duration_penalty = min(1.0, abs(seed_duration_ms - track_duration_ms) / 60_000.0)
-            score = max(0.0, 1.0 - 0.6 * popularity_penalty - 0.4 * duration_penalty)
+            year_diff = abs(track_year - seed_year)
+            year_penalty = year_diff / max(_DEFAULT_YEAR_WINDOW, 1)
+            score = max(0.0, 1.0 - _POPULARITY_WEIGHT * popularity_penalty - _DURATION_WEIGHT * duration_penalty - _YEAR_WEIGHT * year_penalty)
             next_tracks.append({
                 "id": track["id"],
                 "name": track["name"],
@@ -141,11 +167,11 @@ def search_and_get_transitions(request: TrackSearchRequest):
                 "preview_url": track.get("preview_url"),
                 "score": score,
             })
-        
+
         # Sort by descending score (higher = better match)
         next_tracks.sort(key=lambda x: x["score"], reverse=True)
         next_tracks = next_tracks[:5]  # Keep top 5
-        
+
         return DJResponse(
             starting_track=TrackInfo(
                 id=track_id,
@@ -155,6 +181,7 @@ def search_and_get_transitions(request: TrackSearchRequest):
                 popularity=start_track.get("popularity", 0),
                 duration_ms=start_track.get("duration_ms", 0),
                 preview_url=start_track.get("preview_url"),
+                genres=seed_genres,
             ),
             next_tracks=[
                 TrackInfo(

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from requests.exceptions import HTTPError
 from requests.models import Response
+from spotipy.exceptions import SpotifyException
 
 from ai_year_wise_dj.spotify_service import SpotifyService
 
@@ -12,6 +13,10 @@ def _make_403_http_error() -> HTTPError:
     response = Response()
     response.status_code = 403
     return HTTPError(response=response)
+
+
+def _make_403_spotify_exception() -> SpotifyException:
+    return SpotifyException(http_status=403, code=-1, msg="https://api.spotify.com/v1/audio-features/")
 
 
 def _make_service() -> SpotifyService:
@@ -37,9 +42,35 @@ class SpotifyServiceHydrateTests(unittest.TestCase):
         self.assertIn("audio-features", str(caught[0].message))
         self.assertIn("403", str(caught[0].message))
 
+    def test_safe_audio_features_returns_empty_dict_on_403_spotify_exception(self) -> None:
+        svc = _make_service()
+        svc.client.audio_features = MagicMock(side_effect=_make_403_spotify_exception())
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = svc._safe_audio_features("track_id_abc")
+
+        self.assertEqual(result, {})
+        self.assertEqual(len(caught), 1)
+        self.assertIn("audio-features", str(caught[0].message))
+        self.assertIn("403", str(caught[0].message))
+
     def test_safe_audio_analysis_returns_empty_dict_on_403(self) -> None:
         svc = _make_service()
         svc.client.audio_analysis = MagicMock(side_effect=_make_403_http_error())
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = svc._safe_audio_analysis("track_id_abc")
+
+        self.assertEqual(result, {})
+        self.assertEqual(len(caught), 1)
+        self.assertIn("audio-analysis", str(caught[0].message))
+        self.assertIn("403", str(caught[0].message))
+
+    def test_safe_audio_analysis_returns_empty_dict_on_403_spotify_exception(self) -> None:
+        svc = _make_service()
+        svc.client.audio_analysis = MagicMock(side_effect=_make_403_spotify_exception())
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
@@ -59,6 +90,15 @@ class SpotifyServiceHydrateTests(unittest.TestCase):
         with self.assertRaises(HTTPError):
             svc._safe_audio_features("track_id_abc")
 
+    def test_safe_audio_features_re_raises_non_403_spotify_exception(self) -> None:
+        svc = _make_service()
+        svc.client.audio_features = MagicMock(
+            side_effect=SpotifyException(http_status=500, code=-1, msg="server error")
+        )
+
+        with self.assertRaises(SpotifyException):
+            svc._safe_audio_features("track_id_abc")
+
     def test_safe_audio_analysis_re_raises_non_403_errors(self) -> None:
         svc = _make_service()
         response = Response()
@@ -68,12 +108,36 @@ class SpotifyServiceHydrateTests(unittest.TestCase):
         with self.assertRaises(HTTPError):
             svc._safe_audio_analysis("track_id_abc")
 
+    def test_safe_audio_analysis_re_raises_non_403_spotify_exception(self) -> None:
+        svc = _make_service()
+        svc.client.audio_analysis = MagicMock(
+            side_effect=SpotifyException(http_status=500, code=-1, msg="server error")
+        )
+
+        with self.assertRaises(SpotifyException):
+            svc._safe_audio_analysis("track_id_abc")
+
     def test_hydrate_track_returns_empty_dicts_when_both_endpoints_are_403(self) -> None:
         svc = _make_service()
         fake_track = {"id": "t1", "name": "Song", "artists": [], "album": {"release_date": "2020-01-01"}}
         svc.client.track = MagicMock(return_value=fake_track)
         svc.client.audio_features = MagicMock(side_effect=_make_403_http_error())
         svc.client.audio_analysis = MagicMock(side_effect=_make_403_http_error())
+
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            track, features, analysis = svc.hydrate_track("t1")
+
+        self.assertEqual(track, fake_track)
+        self.assertEqual(features, {})
+        self.assertEqual(analysis, {})
+
+    def test_hydrate_track_returns_empty_dicts_when_both_endpoints_raise_spotify_exception_403(self) -> None:
+        svc = _make_service()
+        fake_track = {"id": "t1", "name": "Song", "artists": [], "album": {"release_date": "2020-01-01"}}
+        svc.client.track = MagicMock(return_value=fake_track)
+        svc.client.audio_features = MagicMock(side_effect=_make_403_spotify_exception())
+        svc.client.audio_analysis = MagicMock(side_effect=_make_403_spotify_exception())
 
         with warnings.catch_warnings(record=True):
             warnings.simplefilter("always")

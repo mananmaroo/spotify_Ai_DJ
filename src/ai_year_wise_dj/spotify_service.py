@@ -25,6 +25,11 @@ class SpotifyService:
                 "Set them in environment variables or local .env file."
             )
 
+    # Spotify's search endpoint enforces a maximum of 20 results per page for
+    # restricted app credentials.  Using a higher value returns HTTP 400
+    # "Invalid limit", so we cap every page request at this safe maximum.
+    _SEARCH_PAGE_LIMIT = 20
+
     def search_tracks_by_year_window(self, year: int, window: int = 5, limit: int = 50) -> list[dict]:
         min_year = year - window
         max_year = year + window
@@ -33,7 +38,20 @@ class SpotifyService:
         tracks: list[dict] = []
         offset = 0
         while len(tracks) < limit:
-            page = self.client.search(q=query, type="track", limit=min(50, limit - len(tracks)), offset=offset)
+            page_size = min(self._SEARCH_PAGE_LIMIT, limit - len(tracks))
+            try:
+                page = self.client.search(q=query, type="track", limit=page_size, offset=offset)
+            except (HTTPError, SpotifyException) as exc:
+                status = exc.response.status_code if isinstance(exc, HTTPError) else exc.http_status
+                if status == 400:
+                    warnings.warn(
+                        f"Spotify search returned 400 Bad Request (limit={page_size}, offset={offset}). "
+                        "Returning tracks collected so far.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                    break
+                raise
             items = page.get("tracks", {}).get("items", [])
             if not items:
                 break

@@ -40,7 +40,7 @@ class SpotifyService:
         while len(tracks) < limit:
             page_size = min(self._SEARCH_PAGE_LIMIT, limit - len(tracks))
             try:
-                page = self.client.search(q=query, type="track", limit=page_size, offset=offset)
+                page = self.client.search(q=query, type="track", limit=page_size, offset=offset, market="US")
             except (HTTPError, SpotifyException) as exc:
                 status = exc.response.status_code if isinstance(exc, HTTPError) else exc.http_status
                 if status == 400:
@@ -63,12 +63,12 @@ class SpotifyService:
         min_year = year - window
         max_year = year + window
         query = f"track:{query_text} year:{min_year}-{max_year}"
-        page = self.client.search(q=query, type="track", limit=1, offset=0)
+        page = self.client.search(q=query, type="track", limit=1, offset=0, market="US")
         items = page.get("tracks", {}).get("items", [])
         return items[0] if items else None
 
     def hydrate_track(self, track_id: str) -> tuple[dict, dict, dict]:
-        track = self.client.track(track_id)
+        track = self.client.track(track_id, market="US")
         features = self._safe_audio_features(track_id)
         analysis = self._safe_audio_analysis(track_id)
         return track, features, analysis

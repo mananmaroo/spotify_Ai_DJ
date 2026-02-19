@@ -31,7 +31,7 @@ class TrackInfo(BaseModel):
     id: str
     name: str
     artist: str
-    year: str
+    year: int
     preview_url: str = None
 
 class DJResponse(BaseModel):
@@ -92,7 +92,7 @@ def search_and_get_transitions(request: TrackSearchRequest):
         next_tracks = []
         for track in candidates["tracks"]["items"]:
             try:
-                track_audio_features = sp.audio_features(track["id"])[0]
+                track_audio_features = sp.audio_features(track["id"])"[0]
                 if track_audio_features:
                     next_tracks.append({
                         "id": track["id"],
@@ -130,13 +130,8 @@ def search_and_get_transitions(request: TrackSearchRequest):
                 for t in next_tracks
             ]
         )
-    
+        
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
-
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)

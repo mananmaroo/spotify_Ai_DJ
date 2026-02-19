@@ -99,7 +99,7 @@ class SearchTracksTests(unittest.TestCase):
         call_args = svc.client.search.call_args
         called_limit = call_args.kwargs.get("limit") or (call_args.args[1] if len(call_args.args) > 1 else None)
         self.assertIsNotNone(called_limit)
-        self.assertLessEqual(called_limit, SpotifyService._SEARCH_PAGE_LIMIT)
+        self.assertLessEqual(called_limit, SpotifyService.SEARCH_PAGE_LIMIT)
 
     def test_search_returns_empty_list_on_400_http_error(self) -> None:
         svc = _make_service()

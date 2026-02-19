@@ -180,8 +180,8 @@ class SearchTracksTests(unittest.TestCase):
             result = svc.search_tracks_by_year_window(year=2020, window=5, limit=25)
 
         self.assertEqual(result, [])
-        self.assertEqual(len(caught), 1)
-        self.assertIn("400", str(caught[0].message))
+        self.assertGreaterEqual(len(caught), 1)
+        self.assertTrue(any("400" in str(w.message) for w in caught))
 
     def test_search_returns_empty_list_on_400_spotify_exception(self) -> None:
         svc = _make_service()
@@ -192,21 +192,26 @@ class SearchTracksTests(unittest.TestCase):
             result = svc.search_tracks_by_year_window(year=2020, window=5, limit=25)
 
         self.assertEqual(result, [])
-        self.assertEqual(len(caught), 1)
-        self.assertIn("400", str(caught[0].message))
+        self.assertGreaterEqual(len(caught), 1)
+        self.assertTrue(any("400" in str(w.message) for w in caught))
 
-    def test_search_returns_collected_tracks_on_later_page_400(self) -> None:
-        """If the first page succeeds but a later page hits 400, return what was collected."""
+    def test_search_returns_collected_tracks_when_some_years_fail_with_400(self) -> None:
+        """If the first year succeeds but later years hit 400, return what was collected."""
         svc = _make_service()
-        first_page = {"tracks": {"items": [{"id": f"t{i}"} for i in range(SpotifyService._SEARCH_PAGE_LIMIT)]}}
-        svc.client.search = MagicMock(side_effect=[first_page, _make_400_spotify_exception()])
+        # year=2020, window=5 → 11 years (2015..2025)
+        # per_year_limit = max(1, 40 // 11) = 3
+        per_year_limit = max(1, 40 // 11)
+        first_page = {"tracks": {"items": [{"id": f"t{i}"} for i in range(per_year_limit)]}}
+        side_effects = [first_page] + [_make_400_spotify_exception()] * 10
+        svc.client.search = MagicMock(side_effect=side_effects)
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             result = svc.search_tracks_by_year_window(year=2020, window=5, limit=40)
 
-        self.assertEqual(len(result), 20)
-        self.assertEqual(len(caught), 1)
+        self.assertEqual(len(result), per_year_limit)
+        self.assertGreaterEqual(len(caught), 1)
+        self.assertTrue(any("400" in str(w.message) for w in caught))
 
     def test_search_re_raises_non_400_errors(self) -> None:
         svc = _make_service()

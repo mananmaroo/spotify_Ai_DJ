@@ -31,41 +31,49 @@ class SpotifyService:
     _SEARCH_PAGE_LIMIT = 20
 
     def search_tracks_by_year_window(self, year: int, window: int = 5, limit: int = 50) -> list[dict]:
-        min_year = year - window
-        max_year = year + window
-        query = f"year:{min_year}-{max_year}"
+        start_year = year - window
+        end_year = year + window
+        num_years = end_year - start_year + 1
+        per_year_limit = max(1, limit // num_years)
 
         tracks: list[dict] = []
-        offset = 0
-        while len(tracks) < limit:
-            page_size = min(self._SEARCH_PAGE_LIMIT, limit - len(tracks))
+        for y in range(start_year, end_year + 1):
             try:
-                page = self.client.search(q=query, type="track", limit=page_size, offset=offset, market="US")
+                page = self.client.search(
+                    q=f"year:{y}",
+                    type="track",
+                    limit=min(self._SEARCH_PAGE_LIMIT, per_year_limit),
+                    offset=0,
+                    market="US",
+                )
             except (HTTPError, SpotifyException) as exc:
                 status = exc.response.status_code if isinstance(exc, HTTPError) else exc.http_status
                 if status == 400:
                     warnings.warn(
-                        f"Spotify search returned 400 Bad Request (limit={page_size}, offset={offset}). "
-                        "Returning tracks collected so far.",
+                        f"Spotify search returned 400 Bad Request for year {y}. "
+                        "Skipping this year.",
                         RuntimeWarning,
                         stacklevel=2,
                     )
-                    break
+                    continue
                 raise
             items = page.get("tracks", {}).get("items", [])
-            if not items:
-                break
             tracks.extend(items)
-            offset += len(items)
+            if len(tracks) >= limit:
+                break
         return tracks[:limit]
 
     def find_starting_track(self, query_text: str, year: int, window: int = 5) -> dict | None:
-        min_year = year - window
-        max_year = year + window
-        query = f"track:{query_text} year:{min_year}-{max_year}"
-        page = self.client.search(q=query, type="track", limit=1, offset=0, market="US")
-        items = page.get("tracks", {}).get("items", [])
-        return items[0] if items else None
+        for y in range(year - window, year + window + 1):
+            try:
+                query = f"track:{query_text} year:{y}"
+                page = self.client.search(q=query, type="track", limit=1, offset=0, market="US")
+                items = page.get("tracks", {}).get("items", [])
+                if items:
+                    return items[0]
+            except (HTTPError, SpotifyException):
+                continue
+        return None
 
     def hydrate_track(self, track_id: str) -> tuple[dict, dict, dict]:
         track = self.client.track(track_id, market="US")

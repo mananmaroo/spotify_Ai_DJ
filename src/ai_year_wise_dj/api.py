@@ -61,7 +61,8 @@ def health_check():
 @app.post("/api/search", response_model=DJResponse)
 def search_and_get_transitions(request: TrackSearchRequest):
     """
-    Search for a track by name and artist, then find transition matches.
+    Search for a track by name and artist, then find transition matches using
+    metadata (popularity, duration) — no restricted audio-features endpoint needed.
     """
     try:
         sp = get_spotify_client()
@@ -78,37 +79,39 @@ def search_and_get_transitions(request: TrackSearchRequest):
         
         start_track = results["tracks"]["items"][0]
         track_id = start_track["id"]
-        
-        # Get audio features for the starting track
-        audio_features = sp.audio_features(track_id)[0]
+        seed_popularity = start_track.get("popularity", 50)
+        seed_duration_ms = start_track.get("duration_ms", 0)
+        seed_year = int(start_track["album"]["release_date"][:4])
         
         # Search for tracks from the target year within the window
-        year_range = f"{request.year - request.window}-{request.year + request.window}"
-        search_query = f"year:{year_range}"
-        
+        search_query = f"year:{request.year - request.window}-{request.year + request.window}"
         candidates = sp.search(q=search_query, type="track", limit=request.limit)
         
-        # Extract track info and sort by similarity to starting track
+        # Rank candidates using metadata (popularity gradient + duration proximity).
+        # This avoids the restricted /v1/audio-features endpoint.
         next_tracks = []
         for track in candidates["tracks"]["items"]:
-            try:
-                track_audio_features = sp.audio_features(track["id"])"[0]
-                if track_audio_features:
-                    next_tracks.append({
-                        "id": track["id"],
-                        "name": track["name"],
-                        "artist": track["artists"][0]["name"] if track["artists"] else "Unknown",
-                        "year": track["release_date"].split("-")[0] if track.get("release_date") else "Unknown",
-                        "preview_url": track.get("preview_url"),
-                        "energy_diff": abs(audio_features["energy"] - track_audio_features["energy"]),
-                        "tempo_diff": abs(audio_features["tempo"] - track_audio_features["tempo"]),
-                    })
-            except Exception as e:
-                print(f"Error processing track {track['id']}: {e}")
+            if track["id"] == track_id:
                 continue
+            track_popularity = track.get("popularity", 50)
+            track_duration_ms = track.get("duration_ms", 0)
+            release_date = track["album"].get("release_date", "0000")
+            track_year = int(release_date[:4]) if release_date else 0
+            # Lower penalty = better match
+            popularity_penalty = abs(seed_popularity - track_popularity) / 100.0
+            duration_penalty = min(1.0, abs(seed_duration_ms - track_duration_ms) / 60_000.0)
+            score = max(0.0, 1.0 - 0.6 * popularity_penalty - 0.4 * duration_penalty)
+            next_tracks.append({
+                "id": track["id"],
+                "name": track["name"],
+                "artist": track["artists"][0]["name"] if track["artists"] else "Unknown",
+                "year": track_year,
+                "preview_url": track.get("preview_url"),
+                "score": score,
+            })
         
-        # Sort by similarity (lower difference = better match)
-        next_tracks.sort(key=lambda x: x["energy_diff"] + (x["tempo_diff"] / 100))
+        # Sort by descending score (higher = better match)
+        next_tracks.sort(key=lambda x: x["score"], reverse=True)
         next_tracks = next_tracks[:5]  # Keep top 5
         
         return DJResponse(
@@ -116,7 +119,7 @@ def search_and_get_transitions(request: TrackSearchRequest):
                 id=track_id,
                 name=start_track["name"],
                 artist=start_track["artists"][0]["name"] if start_track["artists"] else "Unknown",
-                year=start_track["release_date"].split("-")[0] if start_track.get("release_date") else "Unknown",
+                year=seed_year,
                 preview_url=start_track.get("preview_url"),
             ),
             next_tracks=[

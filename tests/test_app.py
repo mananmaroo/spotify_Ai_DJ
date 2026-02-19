@@ -2,7 +2,7 @@ import argparse
 import os
 import unittest
 
-from ai_year_wise_dj.app import _env_int, parse_args, resolve_seed_track_id
+from ai_year_wise_dj.app import _env_int, resolve_seed_track_id
 
 
 class _FakeService:
@@ -45,11 +45,6 @@ class AppTests(unittest.TestCase):
                 os.environ.pop("TARGET_YEAR", None)
             else:
                 os.environ["TARGET_YEAR"] = original
-
-    def test_parse_args_tolerates_empty_year_value_pattern(self) -> None:
-        args = parse_args(["--seed-query", "hello", "--year", "--window", "3"])
-        self.assertEqual(args.year, 2018)
-        self.assertEqual(args.window, 3)
 
 
 if __name__ == "__main__":

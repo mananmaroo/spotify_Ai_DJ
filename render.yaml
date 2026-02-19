@@ -8,13 +8,16 @@ services:
       pip install -e .
     startCommand: >-
       python -m ai_year_wise_dj.app
-      --seed-query "${START_TRACK_QUERY}"
+      --seed-track-id ${SEED_TRACK_ID}
+      --year ${TARGET_YEAR}
+      --window ${YEAR_WINDOW}
+      --limit ${TRACK_LIMIT}
     envVars:
       - key: SPOTIPY_CLIENT_ID
         sync: false
       - key: SPOTIPY_CLIENT_SECRET
         sync: false
-      - key: START_TRACK_QUERY
+      - key: SEED_TRACK_ID
         sync: false
       - key: TARGET_YEAR
         value: "2018"

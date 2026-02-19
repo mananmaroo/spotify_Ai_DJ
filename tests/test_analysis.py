@@ -8,7 +8,7 @@ def _fake_track(track_id: str = "t1", release_date: str = "2020-01-01",
     return {
         "id": track_id,
         "name": "Test Song",
-        "artists": [{"name": "Test Artist"}],
+        "artists": [{"name": "Test Artist", "id": "a1"}],
         "album": {"release_date": release_date},
         "popularity": popularity,
         "duration_ms": duration_ms,
@@ -20,10 +20,10 @@ class BuildTrackFingerprintTests(unittest.TestCase):
         fp = build_track_fingerprint(_fake_track(), audio_features={}, audio_analysis={})
         self.assertFalse(fp.has_audio_features)
 
-    def test_has_audio_features_true_when_features_present(self) -> None:
+    def test_has_audio_features_false_when_features_only_no_sections(self) -> None:
         features = {"energy": 0.8, "tempo": 120.0, "loudness": -5.0}
         fp = build_track_fingerprint(_fake_track(), audio_features=features, audio_analysis={})
-        self.assertTrue(fp.has_audio_features)
+        self.assertFalse(fp.has_audio_features)
 
     def test_has_audio_features_true_when_sections_present(self) -> None:
         analysis = {"sections": [{"energy": 0.7, "tempo": 110.0, "loudness": -6.0}]}
@@ -49,6 +49,13 @@ class BuildTrackFingerprintTests(unittest.TestCase):
         del track["duration_ms"]
         fp = build_track_fingerprint(track, audio_features={}, audio_analysis={})
         self.assertEqual(fp.duration_ms, 0)
+
+    def test_no_audio_args_works_and_has_audio_features_false(self) -> None:
+        fp = build_track_fingerprint(_fake_track())
+        self.assertFalse(fp.has_audio_features)
+        self.assertEqual(fp.section_energies, [])
+        self.assertEqual(fp.section_tempos, [])
+        self.assertEqual(fp.section_loudness, [])
 
 
 if __name__ == "__main__":

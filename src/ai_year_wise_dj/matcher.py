@@ -6,6 +6,22 @@ from ai_year_wise_dj.models import TrackFingerprint, TransitionCandidate
 _MAX_DURATION_DIFF_MS = 120_000
 
 
+def _distance(a: float, b: float) -> float:
+    return abs(a - b)
+
+
+def _section_score(
+    current: TrackFingerprint,
+    from_idx: int,
+    candidate: TrackFingerprint,
+    to_idx: int,
+) -> float:
+    energy_score = 1.0 - _distance(current.section_energies[from_idx], candidate.section_energies[to_idx])
+    tempo_score = 1.0 - _distance(current.section_tempos[from_idx], candidate.section_tempos[to_idx])
+    loudness_score = 1.0 - _distance(current.section_loudness[from_idx], candidate.section_loudness[to_idx])
+    return (energy_score + tempo_score + loudness_score) / 3.0
+
+
 def _score_transition(
     current: TrackFingerprint,
     candidate: TrackFingerprint,
@@ -47,8 +63,9 @@ def _metadata_score(from_fp: TrackFingerprint, to_fp: TrackFingerprint) -> tuple
 def best_transition(
     current: TrackFingerprint,
     candidates: list[TrackFingerprint],
-    target_year: int,
+    target_year: int = 0,
     window: int = 2,
+    enforce_same_year: bool = True,
 ) -> TransitionCandidate | None:
     best: TransitionCandidate | None = None
 
@@ -62,39 +79,22 @@ def best_transition(
 
         if use_metadata:
             score, reason = _metadata_score(current, candidate)
-            match = TransitionCandidate(
-                from_track_id=current.track_id,
-                to_track_id=candidate.track_id,
-                from_section_index=0,
-                to_section_index=0,
-                score=score,
-                reason=reason,
-            )
         elif not candidate.has_audio_features:
             # Seed has audio features but this candidate doesn't — skip to
             # avoid scoring fake fallback zeros as a perfect match.
             continue
+        elif enforce_same_year:
+            score, reason = _score_transition(current, candidate, target_year, window)
         else:
-            match = None
-            for from_idx in range(len(current.section_energies)):
-                for to_idx in range(len(candidate.section_energies)):
-                    score = _section_score(current, from_idx, candidate, to_idx)
-                    reason = (
-                        f"energyΔ={_distance(current.section_energies[from_idx], candidate.section_energies[to_idx]):.3f}, "
-                        f"tempoΔ={_distance(current.section_tempos[from_idx], candidate.section_tempos[to_idx]):.3f}, "
-                        f"loudnessΔ={_distance(current.section_loudness[from_idx], candidate.section_loudness[to_idx]):.3f}"
-                    )
-                    candidate_match = TransitionCandidate(
-                        from_track_id=current.track_id,
-                        to_track_id=candidate.track_id,
-                        from_section_index=from_idx,
-                        to_section_index=to_idx,
-                        score=score,
-                        reason=reason,
-                    )
-                    if match is None or candidate_match.score > match.score:
-                        match = candidate_match
+            score, reason = _metadata_score(current, candidate)
 
-        if match is not None and (best is None or match.score > best.score):
+        match = TransitionCandidate(
+            from_track_id=current.track_id,
+            to_track_id=candidate.track_id,
+            score=score,
+            reason=reason,
+        )
+
+        if best is None or match.score > best.score:
             best = match
     return best

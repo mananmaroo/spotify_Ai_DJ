@@ -10,6 +10,7 @@ def _make_fingerprint(track_id: str, release_year: int = 2020, popularity: int =
         track_id=track_id,
         track_name=track_id.upper(),
         artist_names=["Artist"],
+        artist_ids=["artist1"],
         release_year=release_year,
         section_energies=[0.5],
         section_tempos=[0.5],
@@ -20,11 +21,13 @@ def _make_fingerprint(track_id: str, release_year: int = 2020, popularity: int =
     )
 
 
+
+
 class MatcherTests(unittest.TestCase):
     def test_best_transition_prefers_closer_year(self) -> None:
-        current = _make_fp("a", release_year=2020, popularity=60)
-        same_year = _make_fp("b", release_year=2020, popularity=62)
-        diff_year = _make_fp("c", release_year=2015, popularity=62)
+        current = _make_fingerprint("a", release_year=2020, popularity=60)
+        same_year = _make_fingerprint("b", release_year=2020, popularity=62)
+        diff_year = _make_fingerprint("c", release_year=2015, popularity=62)
 
         result = best_transition(current, [diff_year, same_year], target_year=2020, window=2)
 
@@ -32,9 +35,9 @@ class MatcherTests(unittest.TestCase):
         self.assertEqual(result.to_track_id, "b")
 
     def test_best_transition_prefers_closer_popularity(self) -> None:
-        current = _make_fp("a", release_year=2020, popularity=50)
-        close_pop = _make_fp("b", release_year=2020, popularity=52)
-        far_pop = _make_fp("c", release_year=2020, popularity=10)
+        current = _make_fingerprint("a", release_year=2020, popularity=50)
+        close_pop = _make_fingerprint("b", release_year=2020, popularity=52)
+        far_pop = _make_fingerprint("c", release_year=2020, popularity=10)
 
         result = best_transition(current, [far_pop, close_pop], target_year=2020, window=2)
 
@@ -42,20 +45,20 @@ class MatcherTests(unittest.TestCase):
         self.assertEqual(result.to_track_id, "b")
 
     def test_best_transition_skips_same_track(self) -> None:
-        current = _make_fp("a", release_year=2020)
+        current = _make_fingerprint("a", release_year=2020)
 
         result = best_transition(current, [current], target_year=2020, window=2)
 
         self.assertIsNone(result)
 
     def test_best_transition_returns_none_for_empty_candidates(self) -> None:
-        current = _make_fp("a", release_year=2020)
+        current = _make_fingerprint("a", release_year=2020)
         result = best_transition(current, [], target_year=2020, window=2)
         self.assertIsNone(result)
 
     def test_best_transition_scores_include_reason(self) -> None:
-        current = _make_fp("a", release_year=2020, popularity=50)
-        candidate = _make_fp("b", release_year=2020, popularity=55)
+        current = _make_fingerprint("a", release_year=2020, popularity=50)
+        candidate = _make_fingerprint("b", release_year=2020, popularity=55)
 
         result = best_transition(current, [candidate], target_year=2020, window=2)
 

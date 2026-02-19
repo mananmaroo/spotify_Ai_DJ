@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Year-Wise DJ</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif;
+            max-width: 600px; 
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .form-group { 
+            margin: 15px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, button { 
+            padding: 10px;
+            font-size: 14px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        input { 
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button { 
+            width: 100%;
+            cursor: pointer;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            font-weight: bold;
+            margin-top: 10px;
+            transition: transform 0.2s;
+        }
+        button:hover {
+            transform: scale(1.02);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .track { 
+            margin: 15px 0; 
+            padding: 15px; 
+            border: 1px solid #667eea;
+            border-radius: 4px;
+            background: #f8f9ff;
+        }
+        .track strong {
+            color: #667eea;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .track-artist {
+            color: #888;
+            font-size: 14px;
+        }
+        audio {
+            width: 100%;
+            margin-top: 10px;
+        }
+        #results {
+            margin-top: 30px;
+        }
+        .error {
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .loading {
+            text-align: center;
+            color: #667eea;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 AI Year-Wise DJ</h1>
+        <p style="text-align: center; color: #888;">Find smooth transitions between Spotify tracks</p>
+        
+        <div class="form-group">
+            <label for="trackName">Track Name:</label>
+            <input type="text" id="trackName" placeholder="e.g., Blinding Lights">
+        </div>
+        
+        <div class="form-group">
+            <label for="artistName">Artist Name:</label>
+            <input type="text" id="artistName" placeholder="e.g., The Weeknd">
+        </div>
+        
+        <div class="form-group">
+            <label for="year">Target Year (optional):</label>
+            <input type="number" id="year" value="2018">
+        </div>
+        
+        <div class="form-group">
+            <label for="window">Year Window (optional):</label>
+            <input type="number" id="window" value="5" min="1" max="20">
+        </div>
+        
+        <button onclick="searchTrack()" id="searchBtn">Find Transitions</button>
+        
+        <div id="results"></div>
+    </div>
+    
+    <script>
+        async function searchTrack() {
+            const trackName = document.getElementById('trackName').value.trim();
+            const artistName = document.getElementById('artistName').value.trim();
+            const year = parseInt(document.getElementById('year').value);
+            const window = parseInt(document.getElementById('window').value);
+            
+            if (!trackName || !artistName) {
+                document.getElementById('results').innerHTML = '<div class="error">Please enter track and artist name</div>';
+                return;
+            }
+            
+            const searchBtn = document.getElementById('searchBtn');
+            searchBtn.disabled = true;
+            document.getElementById('results').innerHTML = '<div class="loading">Searching Spotify...</div>';
+            
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        track_name: trackName,
+                        artist_name: artistName,
+                        year: year,
+                        window: window
+                    })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    document.getElementById('results').innerHTML = `<div class="error">Error: ${error.detail}</div>`;
+                    searchBtn.disabled = false;
+                    return;
+                }
+                
+                const data = await response.json();
+                let html = `<h2 style="color: #667eea;">Starting Track</h2>
+                            <div class="track">
+                                <strong>${data.starting_track.name}</strong>
+                                <span class="track-artist">${data.starting_track.artist} (${data.starting_track.year})</span>
+                                ${data.starting_track.preview_url ? `<audio controls><source src="${data.starting_track.preview_url}" type="audio/mpeg">Your browser does not support audio.</audio>` : '<p style="color: #999; font-size: 12px;">No preview available</p>'}
+                            </div>
+                            <h2 style="color: #667eea;">Next Smooth Transitions</h2>`;
+                
+                if (data.next_tracks.length === 0) {
+                    html += '<p style="color: #888;">No matching tracks found for this year range.</p>';
+                } else {
+                    data.next_tracks.forEach((track, index) => {
+                        html += `<div class="track">
+                                    <strong>${index + 1}. ${track.name}</strong>
+                                    <span class="track-artist">${track.artist} (${track.year})</span>
+                                    ${track.preview_url ? `<audio controls><source src="${track.preview_url}" type="audio/mpeg">Your browser does not support audio.</audio>` : '<p style="color: #999; font-size: 12px;">No preview available</p>'}
+                                </div>`;
+                    });
+                }
+                
+                document.getElementById('results').innerHTML = html;
+            } catch (error) {
+                document.getElementById('results').innerHTML = `<div class="error">Network error: ${error.message}</div>`;
+            } finally {
+                searchBtn.disabled = false;
+            }
+        }
+        
+        // Allow Enter key to search
+        document.getElementById('trackName').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') searchTrack();
+        });
+        document.getElementById('artistName').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') searchTrack();
+        });
+    </script>
+</body>
+</html>

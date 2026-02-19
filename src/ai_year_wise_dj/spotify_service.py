@@ -28,7 +28,7 @@ class SpotifyService:
     # Spotify's search endpoint enforces a maximum of 20 results per page for
     # restricted app credentials.  Using a higher value returns HTTP 400
     # "Invalid limit", so we cap every page request at this safe maximum.
-    _SEARCH_PAGE_LIMIT = 20
+    SEARCH_PAGE_LIMIT = 20
 
     def search_tracks_by_year_window(self, year: int, window: int = 5, limit: int = 50) -> list[dict]:
         start_year = year - window
@@ -42,7 +42,7 @@ class SpotifyService:
                 page = self.client.search(
                     q=f"year:{y}",
                     type="track",
-                    limit=min(self._SEARCH_PAGE_LIMIT, per_year_limit),
+                    limit=min(self.SEARCH_PAGE_LIMIT, per_year_limit),
                     offset=0,
                     market="US",
                 )

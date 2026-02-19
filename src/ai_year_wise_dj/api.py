@@ -4,9 +4,11 @@ import pathlib
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
+
+from ai_year_wise_dj.spotify_service import SpotifyService
 
 _INDEX_HTML_PATH = pathlib.Path(__file__).parent.parent.parent / "index.html"
 
@@ -26,7 +28,7 @@ class TrackSearchRequest(BaseModel):
     """Request to search for a track by name and artist."""
     track_name: str
     artist_name: str
-    limit: int = 20
+    limit: int = Field(default=SpotifyService.SEARCH_PAGE_LIMIT, ge=1, le=SpotifyService.SEARCH_PAGE_LIMIT)
 
 class TrackInfo(BaseModel):
     """Track information response."""
@@ -136,12 +138,13 @@ def search_and_get_transitions(request: TrackSearchRequest):
         else:
             search_query = f"year:{year_range}"
 
-        candidates_result = sp.search(q=search_query, type="track", limit=request.limit)
+        safe_limit = min(request.limit, SpotifyService.SEARCH_PAGE_LIMIT)
+        candidates_result = sp.search(q=search_query, type="track", limit=safe_limit, market="US")
         candidate_items = candidates_result["tracks"]["items"]
 
         # If the genre-filtered search returned nothing, fall back to year-only
         if not candidate_items and seed_genres:
-            fallback_result = sp.search(q=f"year:{year_range}", type="track", limit=request.limit)
+            fallback_result = sp.search(q=f"year:{year_range}", type="track", limit=safe_limit, market="US")
             candidate_items = fallback_result["tracks"]["items"]
 
         # Rank candidates using metadata (popularity gradient + duration proximity).

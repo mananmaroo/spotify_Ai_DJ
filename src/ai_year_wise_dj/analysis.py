@@ -16,6 +16,7 @@ def _normalize(values: list[float]) -> list[float]:
 
 def build_track_fingerprint(track: dict, audio_features: dict, audio_analysis: dict) -> TrackFingerprint:
     sections = audio_analysis.get("sections", [])
+    has_audio_features = bool(audio_features) or bool(sections)
 
     section_energies = [float(section.get("energy", audio_features.get("energy", 0.0))) for section in sections]
     section_tempos = [float(section.get("tempo", audio_features.get("tempo", 0.0))) for section in sections]
@@ -36,4 +37,7 @@ def build_track_fingerprint(track: dict, audio_features: dict, audio_analysis: d
         section_energies=_normalize(section_energies),
         section_tempos=_normalize(section_tempos),
         section_loudness=_normalize(section_loudness),
+        popularity=int(track.get("popularity", 0)),
+        duration_ms=int(track.get("duration_ms", 0)),
+        has_audio_features=has_audio_features,
     )

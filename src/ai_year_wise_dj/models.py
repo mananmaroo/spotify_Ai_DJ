@@ -12,6 +12,9 @@ class TrackFingerprint:
     section_energies: list[float]
     section_tempos: list[float]
     section_loudness: list[float]
+    popularity: int = 0
+    duration_ms: int = 0
+    has_audio_features: bool = True
 
 
 @dataclass(slots=True)

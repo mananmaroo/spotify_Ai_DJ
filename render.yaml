@@ -1,0 +1,27 @@
+services:
+  - type: worker
+    name: ai-year-wise-dj-worker
+    runtime: python
+    plan: free
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -e .
+    startCommand: >-
+      python -m ai_year_wise_dj.app
+      --seed-query "${START_TRACK_QUERY}"
+      --year ${TARGET_YEAR}
+      --window ${YEAR_WINDOW}
+      --limit ${TRACK_LIMIT}
+    envVars:
+      - key: SPOTIPY_CLIENT_ID
+        sync: false
+      - key: SPOTIPY_CLIENT_SECRET
+        sync: false
+      - key: START_TRACK_QUERY
+        sync: false
+      - key: TARGET_YEAR
+        value: "2018"
+      - key: YEAR_WINDOW
+        value: "5"
+      - key: TRACK_LIMIT
+        value: "25"

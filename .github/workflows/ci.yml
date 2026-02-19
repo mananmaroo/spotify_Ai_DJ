@@ -6,8 +6,8 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
-      seed_track_id:
-        description: "Spotify track id for optional smoke check"
+      start_track_query:
+        description: "Track query for optional Spotify smoke check"
         required: false
       year:
         description: "Target release year for optional smoke check"
@@ -38,7 +38,7 @@ jobs:
         run: python -m compileall src tests
 
   spotify-smoke-check:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_track_id != '' }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.start_track_query != '' }}
     runs-on: ubuntu-latest
     env:
       SPOTIPY_CLIENT_ID: ${{ secrets.SPOTIPY_CLIENT_ID }}
@@ -65,7 +65,7 @@ jobs:
       - name: Run Spotify smoke check
         run: >-
           python -m ai_year_wise_dj.app
-          --seed-track-id "${{ inputs.seed_track_id }}"
+          --seed-query "${{ inputs.start_track_query }}"
           --year "${{ inputs.year }}"
           --window 5
           --limit 5

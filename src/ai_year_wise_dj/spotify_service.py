@@ -75,47 +75,15 @@ class SpotifyService:
                 continue
         return None
 
-    def hydrate_track(self, track_id: str) -> tuple[dict, dict, dict]:
-        track = self.client.track(track_id, market="US")
-        features = self._safe_audio_features(track_id)
-        analysis = self._safe_audio_analysis(track_id)
-        return track, features, analysis
+    def hydrate_track(self, track_id: str) -> dict:
+        return self.client.track(track_id, market="US")
 
-    def _safe_audio_features(self, track_id: str) -> dict:
+    def hydrate_tracks(self, track_ids: Iterable[str]) -> list[dict]:
+        return [self.hydrate_track(tid) for tid in track_ids]
+
+    def get_recommendations(self, seed_track_ids: list[str], limit: int = 20) -> list[dict]:
         try:
-            result = self.client.audio_features([track_id])[0]
-            return result or {}
-        except (HTTPError, SpotifyException) as exc:
-            status = exc.response.status_code if isinstance(exc, HTTPError) else exc.http_status
-            if status == 403:
-                warnings.warn(
-                    "Spotify audio-features endpoint returned 403 Forbidden. "
-                    "This endpoint may be restricted for your app credentials. "
-                    "Falling back to empty features.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                return {}
-            raise
-
-    def _safe_audio_analysis(self, track_id: str) -> dict:
-        try:
-            return self.client.audio_analysis(track_id)
-        except (HTTPError, SpotifyException) as exc:
-            status = exc.response.status_code if isinstance(exc, HTTPError) else exc.http_status
-            if status == 403:
-                warnings.warn(
-                    "Spotify audio-analysis endpoint returned 403 Forbidden. "
-                    "This endpoint may be restricted for your app credentials. "
-                    "Falling back to empty analysis.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                return {}
-            raise
-
-    def hydrate_tracks(self, track_ids: Iterable[str]) -> list[tuple[dict, dict, dict]]:
-        hydrated: list[tuple[dict, dict, dict]] = []
-        for tid in track_ids:
-            hydrated.append(self.hydrate_track(tid))
-        return hydrated
+            result = self.client.recommendations(seed_tracks=seed_track_ids[:5], limit=limit)
+            return result.get("tracks", [])
+        except (HTTPError, SpotifyException):
+            return []

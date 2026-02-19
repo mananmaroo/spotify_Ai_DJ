@@ -2,49 +2,53 @@ from __future__ import annotations
 
 from ai_year_wise_dj.models import TrackFingerprint, TransitionCandidate
 
+# Maximum duration difference (ms) treated as fully dissimilar — two minutes.
+_MAX_DURATION_DIFF_MS = 120_000
 
-def _distance(a: float, b: float) -> float:
-    return abs(a - b)
 
+def _score_transition(
+    current: TrackFingerprint,
+    candidate: TrackFingerprint,
+    target_year: int,
+    window: int,
+) -> tuple[float, str]:
+    pop_diff = abs(current.popularity - candidate.popularity)
+    pop_score = max(0.0, 1.0 - pop_diff / 100.0)
 
-def _section_score(from_fp: TrackFingerprint, from_idx: int, to_fp: TrackFingerprint, to_idx: int) -> float:
-    energy_penalty = _distance(from_fp.section_energies[from_idx], to_fp.section_energies[to_idx])
-    tempo_penalty = _distance(from_fp.section_tempos[from_idx], to_fp.section_tempos[to_idx])
-    loudness_penalty = _distance(from_fp.section_loudness[from_idx], to_fp.section_loudness[to_idx])
+    dur_diff = abs(current.duration_ms - candidate.duration_ms)
+    dur_score = max(0.0, 1.0 - dur_diff / _MAX_DURATION_DIFF_MS)
 
-    weighted_penalty = (0.5 * energy_penalty) + (0.3 * tempo_penalty) + (0.2 * loudness_penalty)
-    return max(0.0, 1.0 - weighted_penalty)
+    year_diff = abs(candidate.release_year - target_year)
+    year_score = max(0.0, 1.0 - year_diff / max(window, 1))
+
+    total = 0.5 * pop_score + 0.2 * dur_score + 0.3 * year_score
+    reason = (
+        f"popularityΔ={pop_diff}, "
+        f"yearΔ={year_diff}, "
+        f"durationΔ={dur_diff}ms"
+    )
+    return total, reason
 
 
 def best_transition(
     current: TrackFingerprint,
     candidates: list[TrackFingerprint],
-    enforce_same_year: bool = True,
+    target_year: int,
+    window: int = 2,
 ) -> TransitionCandidate | None:
     best: TransitionCandidate | None = None
 
     for candidate in candidates:
         if candidate.track_id == current.track_id:
             continue
-        if enforce_same_year and candidate.release_year != current.release_year:
-            continue
 
-        for from_idx in range(len(current.section_energies)):
-            for to_idx in range(len(candidate.section_energies)):
-                score = _section_score(current, from_idx, candidate, to_idx)
-                reason = (
-                    f"energyΔ={_distance(current.section_energies[from_idx], candidate.section_energies[to_idx]):.3f}, "
-                    f"tempoΔ={_distance(current.section_tempos[from_idx], candidate.section_tempos[to_idx]):.3f}, "
-                    f"loudnessΔ={_distance(current.section_loudness[from_idx], candidate.section_loudness[to_idx]):.3f}"
-                )
-                match = TransitionCandidate(
-                    from_track_id=current.track_id,
-                    to_track_id=candidate.track_id,
-                    from_section_index=from_idx,
-                    to_section_index=to_idx,
-                    score=score,
-                    reason=reason,
-                )
-                if best is None or match.score > best.score:
-                    best = match
+        score, reason = _score_transition(current, candidate, target_year, window)
+        match = TransitionCandidate(
+            from_track_id=current.track_id,
+            to_track_id=candidate.track_id,
+            score=score,
+            reason=reason,
+        )
+        if best is None or match.score > best.score:
+            best = match
     return best

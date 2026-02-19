@@ -23,8 +23,8 @@ class TrackSearchRequest(BaseModel):
     track_name: str
     artist_name: str
     year: int = 2018
-    window: int = 5
-    limit: int = 25
+    window: int = 2
+    limit: int = 20
 
 class TrackInfo(BaseModel):
     """Track information response."""
@@ -32,6 +32,8 @@ class TrackInfo(BaseModel):
     name: str
     artist: str
     year: int
+    popularity: int = 0
+    duration_ms: int = 0
     preview_url: str = None
 
 class DJResponse(BaseModel):
@@ -43,15 +45,34 @@ def get_spotify_client():
     """Initialize Spotify client."""
     client_id = os.getenv("SPOTIPY_CLIENT_ID")
     client_secret = os.getenv("SPOTIPY_CLIENT_SECRET")
-    
+
     if not client_id or not client_secret:
         raise ValueError("SPOTIPY_CLIENT_ID and SPOTIPY_CLIENT_SECRET must be set")
-    
+
     credentials = SpotifyClientCredentials(
         client_id=client_id,
         client_secret=client_secret
     )
     return spotipy.Spotify(client_credentials_manager=credentials)
+
+
+def _track_release_year(track: dict) -> int:
+    release_date = track.get("album", {}).get("release_date") or track.get("release_date", "0")
+    return int(release_date[:4])
+
+
+def _score_candidate(seed: dict, candidate: dict, target_year: int, window: int) -> float:
+    pop_diff = abs(seed.get("popularity", 0) - candidate.get("popularity", 0))
+    pop_score = max(0.0, 1.0 - pop_diff / 100.0)
+
+    dur_diff = abs(seed.get("duration_ms", 0) - candidate.get("duration_ms", 0))
+    dur_score = max(0.0, 1.0 - dur_diff / 120_000.0)
+
+    year_diff = abs(_track_release_year(candidate) - target_year)
+    year_score = max(0.0, 1.0 - year_diff / max(window, 1))
+
+    return 0.5 * pop_score + 0.2 * dur_score + 0.3 * year_score
+
 
 @app.get("/health")
 def health_check():
@@ -61,77 +82,68 @@ def health_check():
 @app.post("/api/search", response_model=DJResponse)
 def search_and_get_transitions(request: TrackSearchRequest):
     """
-    Search for a track by name and artist, then find transition matches.
+    Search for a track by name and artist, then find transition matches via
+    Spotify's Recommendations API scored by popularity, duration, and year.
     """
     try:
         sp = get_spotify_client()
-        
+
         # Search for the starting track
         query = f"track:{request.track_name} artist:{request.artist_name}"
         results = sp.search(q=query, type="track", limit=1)
-        
+
         if not results["tracks"]["items"]:
             raise HTTPException(
                 status_code=404,
                 detail=f"Track '{request.track_name}' by '{request.artist_name}' not found"
             )
-        
-        start_track = results["tracks"]["items"][0]
-        track_id = start_track["id"]
-        
-        # Get audio features for the starting track
-        audio_features = sp.audio_features(track_id)[0]
-        
-        # Search for tracks from the target year within the window
-        year_range = f"{request.year - request.window}-{request.year + request.window}"
-        search_query = f"year:{year_range}"
-        
-        candidates = sp.search(q=search_query, type="track", limit=request.limit)
-        
-        # Extract track info and sort by similarity to starting track
-        next_tracks = []
-        for track in candidates["tracks"]["items"]:
-            try:
-                track_audio_features = sp.audio_features(track["id"])"[0]
-                if track_audio_features:
-                    next_tracks.append({
-                        "id": track["id"],
-                        "name": track["name"],
-                        "artist": track["artists"][0]["name"] if track["artists"] else "Unknown",
-                        "year": track["release_date"].split("-")[0] if track.get("release_date") else "Unknown",
-                        "preview_url": track.get("preview_url"),
-                        "energy_diff": abs(audio_features["energy"] - track_audio_features["energy"]),
-                        "tempo_diff": abs(audio_features["tempo"] - track_audio_features["tempo"]),
-                    })
-            except Exception as e:
-                print(f"Error processing track {track['id']}: {e}")
+
+        seed_track = results["tracks"]["items"][0]
+        track_id = seed_track["id"]
+
+        # Fetch recommendations seeded by the starting track (no restricted endpoints)
+        rec_result = sp.recommendations(seed_tracks=[track_id], limit=request.limit)
+        rec_tracks = rec_result.get("tracks", [])
+
+        # Score and sort candidates by popularity, duration, and year proximity
+        scored = []
+        for track in rec_tracks:
+            year_diff = abs(_track_release_year(track) - request.year)
+            if year_diff > request.window:
                 continue
-        
-        # Sort by similarity (lower difference = better match)
-        next_tracks.sort(key=lambda x: x["energy_diff"] + (x["tempo_diff"] / 100))
-        next_tracks = next_tracks[:5]  # Keep top 5
-        
+            score = _score_candidate(seed_track, track, request.year, request.window)
+            scored.append((score, track))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top_tracks = [t for _, t in scored[:5]]
+
         return DJResponse(
             starting_track=TrackInfo(
                 id=track_id,
-                name=start_track["name"],
-                artist=start_track["artists"][0]["name"] if start_track["artists"] else "Unknown",
-                year=start_track["release_date"].split("-")[0] if start_track.get("release_date") else "Unknown",
-                preview_url=start_track.get("preview_url"),
+                name=seed_track["name"],
+                artist=seed_track["artists"][0]["name"] if seed_track["artists"] else "Unknown",
+                year=_track_release_year(seed_track),
+                popularity=seed_track.get("popularity", 0),
+                duration_ms=seed_track.get("duration_ms", 0),
+                preview_url=seed_track.get("preview_url"),
             ),
             next_tracks=[
                 TrackInfo(
                     id=t["id"],
                     name=t["name"],
-                    artist=t["artist"],
-                    year=t["year"],
-                    preview_url=t["preview_url"],
+                    artist=t["artists"][0]["name"] if t["artists"] else "Unknown",
+                    year=_track_release_year(t),
+                    popularity=t.get("popularity", 0),
+                    duration_ms=t.get("duration_ms", 0),
+                    preview_url=t.get("preview_url"),
                 )
-                for t in next_tracks
+                for t in top_tracks
             ]
         )
-        
+
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")

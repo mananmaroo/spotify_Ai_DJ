@@ -29,19 +29,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--year",
         type=int,
+        nargs="?",
         default=_env_int("TARGET_YEAR", 2018),
+        const=_env_int("TARGET_YEAR", 2018),
         help="Target release year (defaults to TARGET_YEAR env or 2018)",
     )
     parser.add_argument(
         "--window",
         type=int,
+        nargs="?",
         default=_env_int("YEAR_WINDOW", 5),
+        const=_env_int("YEAR_WINDOW", 5),
         help="Year window (+/-) (defaults to YEAR_WINDOW env or 5)",
     )
     parser.add_argument(
         "--limit",
         type=int,
+        nargs="?",
         default=_env_int("TRACK_LIMIT", 25),
+        const=_env_int("TRACK_LIMIT", 25),
         help="Number of candidate tracks (defaults to TRACK_LIMIT env or 25)",
     )
     parser.add_argument(

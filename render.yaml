@@ -14,3 +14,25 @@ services:
         sync: false
       - key: PORT
         value: "8000"
+
+  - type: worker
+    name: ai-dj-worker
+    runtime: python
+    pythonVersion: 3.10
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -e .
+    startCommand: python -m ai_year_wise_dj.app --seed-query "${START_TRACK_QUERY}"
+    envVars:
+      - key: SPOTIPY_CLIENT_ID
+        sync: false
+      - key: SPOTIPY_CLIENT_SECRET
+        sync: false
+      - key: START_TRACK_QUERY
+        sync: false
+      - key: TARGET_YEAR
+        sync: false
+      - key: YEAR_WINDOW
+        sync: false
+      - key: TRACK_LIMIT
+        sync: false

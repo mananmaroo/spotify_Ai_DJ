@@ -1,8 +1,9 @@
 import argparse
 import os
+import sys
 import unittest
 
-from ai_year_wise_dj.app import _env_int, resolve_seed_track_id
+from ai_year_wise_dj.app import _env_int, parse_args, resolve_seed_track_id
 
 
 class _FakeService:
@@ -45,6 +46,18 @@ class AppTests(unittest.TestCase):
                 os.environ.pop("TARGET_YEAR", None)
             else:
                 os.environ["TARGET_YEAR"] = original
+
+    def test_parse_args_uses_defaults_when_int_flags_have_no_value(self) -> None:
+        """Simulate shell empty-expansion: --year ${UNSET_VAR} becomes just --year."""
+        saved = sys.argv
+        try:
+            sys.argv = ["app", "--seed-query", "test song", "--year", "--window", "--limit"]
+            args = parse_args()
+            self.assertEqual(args.year, _env_int("TARGET_YEAR", 2018))
+            self.assertEqual(args.window, _env_int("YEAR_WINDOW", 5))
+            self.assertEqual(args.limit, _env_int("TRACK_LIMIT", 25))
+        finally:
+            sys.argv = saved
 
 
 if __name__ == "__main__":

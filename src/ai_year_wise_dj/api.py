@@ -1,10 +1,14 @@
 """FastAPI web server for AI Year-Wise DJ."""
 import os
+import pathlib
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
+
+_INDEX_HTML_PATH = pathlib.Path(__file__).parent.parent.parent / "index.html"
 
 app = FastAPI(title="AI Year-Wise DJ")
 
@@ -74,6 +78,13 @@ def _score_candidate(seed: dict, candidate: dict, target_year: int, window: int)
     return 0.5 * pop_score + 0.2 * dur_score + 0.3 * year_score
 
 
+@app.get("/")
+def serve_index():
+    """Serve the frontend HTML."""
+    if _INDEX_HTML_PATH.exists():
+        return FileResponse(str(_INDEX_HTML_PATH), media_type="text/html")
+    return {"message": "AI Year-Wise DJ API is running. Use /api/search to find transitions."}
+
 @app.get("/health")
 def health_check():
     """Health check endpoint."""
@@ -141,19 +152,19 @@ def search_and_get_transitions(request: TrackSearchRequest):
                 name=start_track["name"],
                 artist=start_track["artists"][0]["name"] if start_track["artists"] else "Unknown",
                 year=seed_year,
+                popularity=start_track.get("popularity", 0),
+                duration_ms=start_track.get("duration_ms", 0),
                 preview_url=start_track.get("preview_url"),
             ),
             next_tracks=[
                 TrackInfo(
                     id=t["id"],
                     name=t["name"],
-                    artist=t["artists"][0]["name"] if t["artists"] else "Unknown",
-                    year=_track_release_year(t),
-                    popularity=t.get("popularity", 0),
-                    duration_ms=t.get("duration_ms", 0),
+                    artist=t["artist"],
+                    year=t["year"],
                     preview_url=t.get("preview_url"),
                 )
-                for t in top_tracks
+                for t in next_tracks
             ]
         )
 

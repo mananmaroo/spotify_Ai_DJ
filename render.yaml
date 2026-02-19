@@ -6,7 +6,7 @@ services:
     buildCommand: |
       pip install --upgrade pip
       pip install -e .
-    startCommand: python -m ai_year_wise_dj.api
+    startCommand: python -m ai_year_wise_dj
     envVars:
       - key: SPOTIPY_CLIENT_ID
         sync: false

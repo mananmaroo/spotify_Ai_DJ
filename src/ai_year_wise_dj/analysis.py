@@ -14,18 +14,27 @@ def _normalize(values: list[float]) -> list[float]:
     return [(v - min_v) / span for v in values]
 
 
-def build_track_fingerprint(track: dict, audio_features: dict, audio_analysis: dict) -> TrackFingerprint:
+def build_track_fingerprint(
+    track: dict,
+    audio_features: dict | None = None,
+    audio_analysis: dict | None = None,
+) -> TrackFingerprint:
+    audio_features = audio_features or {}
+    audio_analysis = audio_analysis or {}
+
     sections = audio_analysis.get("sections", [])
-    has_audio_features = bool(audio_features) or bool(sections)
 
-    section_energies = [float(section.get("energy", audio_features.get("energy", 0.0))) for section in sections]
-    section_tempos = [float(section.get("tempo", audio_features.get("tempo", 0.0))) for section in sections]
-    section_loudness = [float(section.get("loudness", audio_features.get("loudness", -20.0))) for section in sections]
+    # Only true when we actually have usable audio section data.
+    has_audio_features = bool(sections)
 
-    if not sections:
-        section_energies = [float(audio_features.get("energy", 0.0))]
-        section_tempos = [float(audio_features.get("tempo", 0.0))]
-        section_loudness = [float(audio_features.get("loudness", -20.0))]
+    section_energies: list[float] = []
+    section_tempos: list[float] = []
+    section_loudness: list[float] = []
+
+    for section in sections:
+        section_energies.append(float(section.get("energy", 0.0)))
+        section_tempos.append(float(section.get("tempo", 0.0)))
+        section_loudness.append(float(section.get("loudness", -20.0)))
 
     release_year = int(track["album"]["release_date"][:4])
 

@@ -24,3 +24,5 @@ class TransitionCandidate:
     to_track_id: str
     score: float
     reason: str
+    from_section_index: int = 0
+    to_section_index: int = 0

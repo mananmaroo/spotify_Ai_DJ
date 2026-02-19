@@ -50,11 +50,6 @@ def parse_args() -> argparse.Namespace:
         const=_env_int("TRACK_LIMIT", 25),
         help="Number of candidate tracks (defaults to TRACK_LIMIT env or 25)",
     )
-    parser.add_argument(
-        "--allow-cross-year",
-        action="store_true",
-        help="Allow matching outside exact year if within window",
-    )
     return parser.parse_args()
 
 
@@ -82,23 +77,28 @@ def main() -> None:
     service = SpotifyService()
 
     seed_track_id = resolve_seed_track_id(args, service)
-    seed_track, seed_features, seed_analysis = service.hydrate_track(seed_track_id)
-    seed_fp = build_track_fingerprint(seed_track, seed_features, seed_analysis)
+    seed_track = service.hydrate_track(seed_track_id)
+    seed_fp = build_track_fingerprint(seed_track)
 
-    search_results = service.search_tracks_by_year_window(args.year, window=args.window, limit=args.limit)
-    candidate_ids = [t["id"] for t in search_results if t.get("id")]
+    # Use Spotify's recommendations API seeded with the current track, then
+    # filter and score by year window, popularity gradient, and duration.
+    rec_tracks = service.get_recommendations([seed_track_id], limit=args.limit)
+    if not rec_tracks:
+        # Fall back to year-window search when recommendations returns nothing.
+        search_results = service.search_tracks_by_year_window(args.year, window=args.window, limit=args.limit)
+        candidate_ids = [t["id"] for t in search_results if t.get("id")]
+        rec_tracks = service.hydrate_tracks(candidate_ids)
 
-    hydrated = service.hydrate_tracks(candidate_ids)
-    fingerprints = [build_track_fingerprint(track, features, analysis) for track, features, analysis in hydrated]
+    fingerprints = [build_track_fingerprint(t) for t in rec_tracks if t.get("id")]
 
-    match = best_transition(seed_fp, fingerprints, enforce_same_year=not args.allow_cross_year)
+    match = best_transition(seed_fp, fingerprints, target_year=args.year, window=args.window)
     if not match:
         print("No suitable transition match found.")
         return
 
     print("Next transition match")
-    print(f"From track: {match.from_track_id} (section {match.from_section_index})")
-    print(f"To track:   {match.to_track_id} (section {match.to_section_index})")
+    print(f"From track: {match.from_track_id}")
+    print(f"To track:   {match.to_track_id}")
     print(f"Score:      {match.score:.4f}")
     print(f"Why:        {match.reason}")
 

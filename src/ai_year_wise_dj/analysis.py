@@ -33,6 +33,7 @@ def build_track_fingerprint(track: dict, audio_features: dict, audio_analysis: d
         track_id=track["id"],
         track_name=track["name"],
         artist_names=[a["name"] for a in track.get("artists", [])],
+        artist_ids=[a["id"] for a in track.get("artists", [])],
         release_year=release_year,
         section_energies=_normalize(section_energies),
         section_tempos=_normalize(section_tempos),

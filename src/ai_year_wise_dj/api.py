@@ -23,8 +23,8 @@ class TrackSearchRequest(BaseModel):
     track_name: str
     artist_name: str
     year: int = 2018
-    window: int = 5
-    limit: int = 25
+    window: int = 2
+    limit: int = 20
 
 class TrackInfo(BaseModel):
     """Track information response."""
@@ -32,6 +32,8 @@ class TrackInfo(BaseModel):
     name: str
     artist: str
     year: int
+    popularity: int = 0
+    duration_ms: int = 0
     preview_url: str = None
 
 class DJResponse(BaseModel):
@@ -43,15 +45,34 @@ def get_spotify_client():
     """Initialize Spotify client."""
     client_id = os.getenv("SPOTIPY_CLIENT_ID")
     client_secret = os.getenv("SPOTIPY_CLIENT_SECRET")
-    
+
     if not client_id or not client_secret:
         raise ValueError("SPOTIPY_CLIENT_ID and SPOTIPY_CLIENT_SECRET must be set")
-    
+
     credentials = SpotifyClientCredentials(
         client_id=client_id,
         client_secret=client_secret
     )
     return spotipy.Spotify(client_credentials_manager=credentials)
+
+
+def _track_release_year(track: dict) -> int:
+    release_date = track.get("album", {}).get("release_date") or track.get("release_date", "0")
+    return int(release_date[:4])
+
+
+def _score_candidate(seed: dict, candidate: dict, target_year: int, window: int) -> float:
+    pop_diff = abs(seed.get("popularity", 0) - candidate.get("popularity", 0))
+    pop_score = max(0.0, 1.0 - pop_diff / 100.0)
+
+    dur_diff = abs(seed.get("duration_ms", 0) - candidate.get("duration_ms", 0))
+    dur_score = max(0.0, 1.0 - dur_diff / 120_000.0)
+
+    year_diff = abs(_track_release_year(candidate) - target_year)
+    year_score = max(0.0, 1.0 - year_diff / max(window, 1))
+
+    return 0.5 * pop_score + 0.2 * dur_score + 0.3 * year_score
+
 
 @app.get("/health")
 def health_check():
@@ -66,11 +87,11 @@ def search_and_get_transitions(request: TrackSearchRequest):
     """
     try:
         sp = get_spotify_client()
-        
+
         # Search for the starting track
         query = f"track:{request.track_name} artist:{request.artist_name}"
         results = sp.search(q=query, type="track", limit=1)
-        
+
         if not results["tracks"]["items"]:
             raise HTTPException(
                 status_code=404,
@@ -126,15 +147,19 @@ def search_and_get_transitions(request: TrackSearchRequest):
                 TrackInfo(
                     id=t["id"],
                     name=t["name"],
-                    artist=t["artist"],
-                    year=t["year"],
-                    preview_url=t["preview_url"],
+                    artist=t["artists"][0]["name"] if t["artists"] else "Unknown",
+                    year=_track_release_year(t),
+                    popularity=t.get("popularity", 0),
+                    duration_ms=t.get("duration_ms", 0),
+                    preview_url=t.get("preview_url"),
                 )
-                for t in next_tracks
+                for t in top_tracks
             ]
         )
-        
+
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")

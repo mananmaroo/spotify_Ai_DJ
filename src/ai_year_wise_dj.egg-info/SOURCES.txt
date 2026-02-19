@@ -14,6 +14,7 @@ src/ai_year_wise_dj.egg-info/SOURCES.txt
 src/ai_year_wise_dj.egg-info/dependency_links.txt
 src/ai_year_wise_dj.egg-info/requires.txt
 src/ai_year_wise_dj.egg-info/top_level.txt
+tests/test_analysis.py
 tests/test_app.py
 tests/test_config.py
 tests/test_matcher.py

@@ -64,15 +64,13 @@ class SpotifyService:
         return tracks[:limit]
 
     def find_starting_track(self, query_text: str, year: int, window: int = 5) -> dict | None:
-        for y in range(year - window, year + window + 1):
-            try:
-                query = f"track:{query_text} year:{y}"
-                page = self.client.search(q=query, type="track", limit=1, offset=0, market="US")
-                items = page.get("tracks", {}).get("items", [])
-                if items:
-                    return items[0]
-            except (HTTPError, SpotifyException):
-                continue
+        try:
+            page = self.client.search(q=f"track:{query_text}", type="track", limit=1, offset=0, market="US")
+            items = page.get("tracks", {}).get("items", [])
+            if items:
+                return items[0]
+        except (HTTPError, SpotifyException):
+            pass
         return None
 
     def hydrate_track(self, track_id: str) -> dict:

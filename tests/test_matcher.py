@@ -65,31 +65,30 @@ class MatcherTests(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertIn("popularityΔ=", result.reason)
         self.assertIn("yearΔ=", result.reason)
-        self.assertIn("durationΔ=", result.reason)
 
     # ------------------------------------------------------------------
     # Metadata fallback tests (has_audio_features=False)
     # ------------------------------------------------------------------
 
     def test_metadata_score_identical_tracks_is_one(self) -> None:
-        fp = _make_fingerprint("a", popularity=70, duration_ms=200_000)
+        fp = _make_fingerprint("a", popularity=70, release_year=2020)
         score, reason = _metadata_score(fp, fp)
         self.assertAlmostEqual(score, 1.0)
         self.assertIn("popularityΔ", reason)
-        self.assertIn("durationΔ", reason)
+        self.assertIn("yearΔ", reason)
 
     def test_metadata_score_decreases_with_popularity_difference(self) -> None:
-        from_fp = _make_fingerprint("a", popularity=50, duration_ms=200_000)
-        close = _make_fingerprint("b", popularity=55, duration_ms=200_000)
-        far = _make_fingerprint("c", popularity=100, duration_ms=200_000)
+        from_fp = _make_fingerprint("a", popularity=50, release_year=2020)
+        close = _make_fingerprint("b", popularity=55, release_year=2020)
+        far = _make_fingerprint("c", popularity=100, release_year=2020)
         score_close, _ = _metadata_score(from_fp, close)
         score_far, _ = _metadata_score(from_fp, far)
         self.assertGreater(score_close, score_far)
 
     def test_best_transition_uses_metadata_when_no_audio_features(self) -> None:
-        current = _make_fingerprint("seed", popularity=60, duration_ms=200_000, has_audio_features=False)
-        close = _make_fingerprint("close", popularity=62, duration_ms=205_000, has_audio_features=False)
-        far = _make_fingerprint("far", popularity=20, duration_ms=100_000, has_audio_features=False)
+        current = _make_fingerprint("seed", popularity=60, release_year=2020, has_audio_features=False)
+        close = _make_fingerprint("close", popularity=62, release_year=2020, has_audio_features=False)
+        far = _make_fingerprint("far", popularity=20, release_year=2010, has_audio_features=False)
 
         result = best_transition(current, [far, close], enforce_same_year=False)
 

@@ -81,9 +81,33 @@ class SpotifyService:
     def hydrate_tracks(self, track_ids: Iterable[str]) -> list[dict]:
         return [self.hydrate_track(tid) for tid in track_ids]
 
-    def get_recommendations(self, seed_track_ids: list[str], limit: int = 20) -> list[dict]:
+    def get_recommendations(
+        self,
+        seed_track_ids: list[str],
+        seed_artist_ids: list[str] | None = None,
+        seed_genres: list[str] | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        seed_artist_ids = list(seed_artist_ids or [])
+        seed_genres = list(seed_genres or [])
+
+        # Spotify enforces a maximum of 5 combined seeds across all three types.
+        # Trim seeds to stay within that limit, prioritising tracks then artists.
+        available = 5
+        track_seeds = seed_track_ids[:available]
+        available -= len(track_seeds)
+        artist_seeds = seed_artist_ids[:available]
+        available -= len(artist_seeds)
+        genre_seeds = seed_genres[:available]
+
+        kwargs: dict = {"seed_tracks": track_seeds, "limit": limit}
+        if artist_seeds:
+            kwargs["seed_artists"] = artist_seeds
+        if genre_seeds:
+            kwargs["seed_genres"] = genre_seeds
+
         try:
-            result = self.client.recommendations(seed_tracks=seed_track_ids[:5], limit=limit)
+            result = self.client.recommendations(**kwargs)
             return result.get("tracks", [])
         except (HTTPError, SpotifyException):
             return []

@@ -70,7 +70,44 @@ class RecommendationsTests(unittest.TestCase):
         self.assertEqual(result, fake_tracks)
         svc.client.recommendations.assert_called_once_with(seed_tracks=["seed_id"], limit=20)
 
-    def test_get_recommendations_truncates_seed_to_five(self) -> None:
+    def test_get_recommendations_passes_artist_and_genre_seeds(self) -> None:
+        svc = _make_service()
+        svc.client.recommendations = MagicMock(return_value={"tracks": []})
+
+        svc.get_recommendations(["track1"], seed_artist_ids=["artist1"], seed_genres=["hip-hop", "rap"], limit=10)
+
+        kwargs = svc.client.recommendations.call_args.kwargs
+        self.assertEqual(kwargs["seed_tracks"], ["track1"])
+        self.assertEqual(kwargs["seed_artists"], ["artist1"])
+        self.assertEqual(kwargs["seed_genres"], ["hip-hop", "rap"])
+        self.assertEqual(kwargs["limit"], 10)
+
+    def test_get_recommendations_omits_empty_artist_and_genre_seeds(self) -> None:
+        svc = _make_service()
+        svc.client.recommendations = MagicMock(return_value={"tracks": []})
+
+        svc.get_recommendations(["track1"], seed_artist_ids=[], seed_genres=[], limit=10)
+
+        kwargs = svc.client.recommendations.call_args.kwargs
+        self.assertNotIn("seed_artists", kwargs)
+        self.assertNotIn("seed_genres", kwargs)
+
+    def test_get_recommendations_caps_combined_seeds_at_five(self) -> None:
+        svc = _make_service()
+        svc.client.recommendations = MagicMock(return_value={"tracks": []})
+
+        svc.get_recommendations(
+            ["t1", "t2", "t3"],
+            seed_artist_ids=["a1", "a2"],
+            seed_genres=["pop", "rock"],
+            limit=10,
+        )
+
+        kwargs = svc.client.recommendations.call_args.kwargs
+        total = len(kwargs["seed_tracks"]) + len(kwargs.get("seed_artists", [])) + len(kwargs.get("seed_genres", []))
+        self.assertLessEqual(total, 5)
+
+    def test_get_recommendations_caps_track_seeds_at_five(self) -> None:
         svc = _make_service()
         svc.client.recommendations = MagicMock(return_value={"tracks": []})
 

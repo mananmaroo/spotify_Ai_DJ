@@ -4,7 +4,7 @@ Backend prototype for an **AI DJ brain** that creates smooth transitions between
 
 ## What this backend does
 
-- Searches tracks using song + artist + genre + exact year via Spotify Web API.
+- Searches tracks using song + artist via Spotify Web API.
 - Fetches audio features + audio analysis for candidate tracks.
 - Builds section-level energy fingerprints from Spotify analysis.
 - Finds the best transition match between the currently playing track and next candidate songs.
@@ -41,7 +41,7 @@ python -m ai_year_wise_dj.app --seed-track-id <spotify_track_id> --year 2018 --w
 ## Notes
 
 - `.env` is ignored by git to prevent secret leakage; only `.env.example` is tracked.
-- API search uses the exact year provided by the user (no year window/range).
+- API search only requires song name and artist from the user.
 - Matching currently uses section-level energy + tempo + loudness heuristics.
 - Playback control hooks are represented as interfaces/placeholders for frontend or scheduler integration.
 

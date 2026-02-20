@@ -116,10 +116,16 @@ def search_and_get_transitions(request: TrackSearchRequest):
         track_id = start_track["id"]
         seed_popularity = start_track.get("popularity", 50)
         seed_duration_ms = start_track.get("duration_ms", 0)
-        year = _track_release_year(start_track)
+        try:
+            year = _track_release_year(start_track)
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=422,
+                detail="Starting track has missing or invalid release date metadata",
+            )
 
         safe_limit = min(request.limit, SpotifyService.SEARCH_PAGE_LIMIT)
-        candidates_result = sp.search(q=f'artist:{request.artist_name}', type="track", limit=safe_limit, market="US")
+        candidates_result = sp.search(q=f'artist:"{request.artist_name}"', type="track", limit=safe_limit, market="US")
         candidate_items = candidates_result["tracks"]["items"]
 
         # Rank candidates using metadata (popularity gradient + duration proximity).

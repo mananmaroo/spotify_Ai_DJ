@@ -40,6 +40,7 @@ class TrackInfo(BaseModel):
     duration_ms: int = 0
     preview_url: str = None
     genres: list[str] = []
+    mix_point_ms: int = 0
 
 class DJResponse(BaseModel):
     """Response with starting track and next recommendations."""
@@ -61,24 +62,6 @@ def get_spotify_client():
     return spotipy.Spotify(client_credentials_manager=credentials)
 
 
-def _track_release_year(track: dict) -> int:
-    release_date = track.get("album", {}).get("release_date") or track.get("release_date", "0")
-    return int(release_date[:4])
-
-
-def _score_candidate(seed: dict, candidate: dict, target_year: int, window: int) -> float:
-    pop_diff = abs(seed.get("popularity", 0) - candidate.get("popularity", 0))
-    pop_score = max(0.0, 1.0 - pop_diff / 100.0)
-
-    dur_diff = abs(seed.get("duration_ms", 0) - candidate.get("duration_ms", 0))
-    dur_score = max(0.0, 1.0 - dur_diff / 120_000.0)
-
-    year_diff = abs(_track_release_year(candidate) - target_year)
-    year_score = max(0.0, 1.0 - year_diff / max(window, 1))
-
-    return 0.5 * pop_score + 0.2 * dur_score + 0.3 * year_score
-
-
 @app.get("/")
 def serve_index():
     """Serve the frontend HTML."""
@@ -91,24 +74,38 @@ def health_check():
     """Health check endpoint."""
     return {"status": "ok"}
 
-_DEFAULT_YEAR_WINDOW = 3
-_POPULARITY_WEIGHT = 0.5
-_DURATION_WEIGHT = 0.3
-_YEAR_WEIGHT = 0.2
+
+def _compute_mix_point_ms(duration_ms: int) -> int:
+    """Return an estimated mix-point in milliseconds.
+
+    Uses a simple heuristic that places the transition point after the first
+    chorus — typically around 35 % into the song — clamped so it is never
+    earlier than 45 s or later than the midpoint of the track.  This avoids
+    the restricted Spotify Audio-Analysis endpoint while still giving a
+    musically sensible cue point.
+    """
+    if duration_ms <= 0:
+        return 0
+    after_first_chorus = int(duration_ms * 0.35)
+    midpoint = duration_ms // 2
+    return min(midpoint, max(45_000, after_first_chorus))
 
 
 @app.post("/api/search", response_model=DJResponse)
 def search_and_get_transitions(request: TrackSearchRequest):
     """
-    Search for a track by name and artist, then find transition matches using
-    the seed track's own year and genre — no user-provided year/window needed.
+    Search for a track by artist + name, dynamically detect its genre, and
+    return Spotify recommendations seeded with the track, its primary artist,
+    and up to two of its genres.  Every returned track includes a ``mix_point_ms``
+    cue placed after the first chorus (≈ 35 % of the track's duration, clamped
+    between 45 s and the midpoint).
     """
     try:
         sp = get_spotify_client()
 
-        # Search for the starting track
-        query = f"track:{request.track_name} artist:{request.artist_name}"
-        results = sp.search(q=query, type="track", limit=1)
+        # 1. Search for the starting track using reliable artist+track syntax.
+        query = f"artist:{request.artist_name} track:{request.track_name}"
+        results = sp.search(q=query, type="track", limit=1, market="US")
 
         if not results["tracks"]["items"]:
             raise HTTPException(
@@ -118,84 +115,56 @@ def search_and_get_transitions(request: TrackSearchRequest):
 
         start_track = results["tracks"]["items"][0]
         track_id = start_track["id"]
-        seed_popularity = start_track.get("popularity", 50)
-        seed_duration_ms = start_track.get("duration_ms", 0)
         seed_year = int(start_track["album"]["release_date"][:4])
 
-        # Fetch artist genres so we can find musically similar tracks
+        # 2. Dynamically detect genres from the primary artist.
         seed_genres: list[str] = []
+        artist_id: str | None = None
         if start_track.get("artists"):
             artist_id = start_track["artists"][0]["id"]
             artist_info = sp.artist(artist_id)
             seed_genres = artist_info.get("genres", [])
 
-        # Build a candidate search query from the seed track's year (± window)
-        # and its primary genre when available.
-        year_range = f"{seed_year - _DEFAULT_YEAR_WINDOW}-{seed_year + _DEFAULT_YEAR_WINDOW}"
-        if seed_genres:
-            primary_genre = f'"{seed_genres[0]}"'
-            search_query = f"genre:{primary_genre} year:{year_range}"
-        else:
-            search_query = f"year:{year_range}"
+        # 3. Get recommendations seeded by track + artist + up to 2 genres.
+        #    Total seeds must not exceed 5, so: 1 track + 1 artist + 2 genres = 4.
+        artist_seeds = [artist_id] if artist_id else []
+        rec_tracks = sp.recommendations(
+            seed_tracks=[track_id],
+            seed_artists=artist_seeds,
+            seed_genres=seed_genres[:2],
+            limit=request.limit,
+            market="US",
+        ).get("tracks", [])
 
-        safe_limit = min(request.limit, SpotifyService.SEARCH_PAGE_LIMIT)
-        candidates_result = sp.search(q=search_query, type="track", limit=safe_limit, market="US")
-        candidate_items = candidates_result["tracks"]["items"]
-
-        # If the genre-filtered search returned nothing, fall back to year-only
-        if not candidate_items and seed_genres:
-            fallback_result = sp.search(q=f"year:{year_range}", type="track", limit=safe_limit, market="US")
-            candidate_items = fallback_result["tracks"]["items"]
-
-        # Rank candidates using metadata (popularity gradient + duration proximity).
-        # This avoids the restricted /v1/audio-features endpoint.
-        next_tracks = []
-        for track in candidate_items:
-            if track["id"] == track_id:
-                continue
-            track_popularity = track.get("popularity", 50)
-            track_duration_ms = track.get("duration_ms", 0)
-            release_date = track["album"].get("release_date", "0000")
-            track_year = int(release_date[:4]) if release_date else 0
-            popularity_penalty = abs(seed_popularity - track_popularity) / 100.0
-            duration_penalty = min(1.0, abs(seed_duration_ms - track_duration_ms) / 60_000.0)
-            year_diff = abs(track_year - seed_year)
-            year_penalty = year_diff / max(_DEFAULT_YEAR_WINDOW, 1)
-            score = max(0.0, 1.0 - _POPULARITY_WEIGHT * popularity_penalty - _DURATION_WEIGHT * duration_penalty - _YEAR_WEIGHT * year_penalty)
-            next_tracks.append({
-                "id": track["id"],
-                "name": track["name"],
-                "artist": track["artists"][0]["name"] if track["artists"] else "Unknown",
-                "year": track_year,
-                "preview_url": track.get("preview_url"),
-                "score": score,
-            })
-
-        # Sort by descending score (higher = better match)
-        next_tracks.sort(key=lambda x: x["score"], reverse=True)
-        next_tracks = next_tracks[:5]  # Keep top 5
+        # 4. Build next-track list with mix-point cues.
+        next_tracks = [
+            TrackInfo(
+                id=t["id"],
+                name=t["name"],
+                artist=t["artists"][0]["name"] if t.get("artists") else "Unknown",
+                year=int(t["album"]["release_date"][:4]) if t.get("album", {}).get("release_date") else 0,
+                popularity=t.get("popularity", 0),
+                duration_ms=t.get("duration_ms", 0),
+                preview_url=t.get("preview_url"),
+                mix_point_ms=_compute_mix_point_ms(t.get("duration_ms", 0)),
+            )
+            for t in rec_tracks
+            if t.get("id") and t["id"] != track_id
+        ]
 
         return DJResponse(
             starting_track=TrackInfo(
                 id=track_id,
                 name=start_track["name"],
-                artist=start_track["artists"][0]["name"] if start_track["artists"] else "Unknown",
+                artist=start_track["artists"][0]["name"] if start_track.get("artists") else "Unknown",
                 year=seed_year,
                 popularity=start_track.get("popularity", 0),
                 duration_ms=start_track.get("duration_ms", 0),
                 preview_url=start_track.get("preview_url"),
                 genres=seed_genres,
+                mix_point_ms=_compute_mix_point_ms(start_track.get("duration_ms", 0)),
             ),
-            next_tracks=[
-                TrackInfo(
-                    id=t["id"],
-                    name=t["name"],
-                    artist=t["artist"],
-                    year=t["year"],
-                    preview_url=t.get("preview_url"),
-                )
-                for t in next_tracks
-            ]
+            next_tracks=next_tracks,
         )
 
     except ValueError as e:

@@ -152,11 +152,13 @@
         async function searchTrack() {
             const trackName = document.getElementById('trackName').value.trim();
             const artistName = document.getElementById('artistName').value.trim();
-            const genre = document.getElementById('genre').value.trim();
-            const year = Number(document.getElementById('year').value);
-            
-            if (!trackName || !artistName || !genre || !year) {
-                document.getElementById('results').innerHTML = '<div class="error">Please enter track, artist, genre, and year</div>';
+            const genreValue = document.getElementById('genre').value.trim();
+            const yearValue = document.getElementById('year').value.trim();
+            const genre = genreValue || null;
+            const year = yearValue ? Number(yearValue) : null;
+
+            if (!trackName || !artistName) {
+                document.getElementById('results').innerHTML = '<div class="error">Please enter track and artist</div>';
                 return;
             }
             

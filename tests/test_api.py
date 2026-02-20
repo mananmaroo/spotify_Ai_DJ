@@ -111,6 +111,7 @@ class ApiSearchTests(unittest.TestCase):
         second_query = fake_spotify.search.call_args_list[1].kwargs["q"]
         self.assertEqual(first_query, "track:Seed Song artist:Seed Artist")
         self.assertEqual(second_query, 'genre:"rock" year:2019')
+        fake_spotify.artist.assert_called_once_with("artist1")
         self.assertEqual(response.starting_track.year, 2019)
         self.assertEqual(response.starting_track.genres, ["rock"])
 

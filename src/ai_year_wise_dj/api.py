@@ -69,7 +69,8 @@ def _track_release_year(track: dict) -> int:
 
 
 def _seed_genres(sp: spotipy.Spotify, track: dict, fallback_genre: str | None) -> list[str]:
-    artist_id = (track.get("artists") or [{}])[0].get("id")
+    artists = track.get("artists") or []
+    artist_id = next((artist.get("id") for artist in artists if artist.get("id")), None)
     if artist_id:
         artist = sp.artist(artist_id)
         artist_genres = artist.get("genres") or []
@@ -132,12 +133,18 @@ def search_and_get_transitions(request: TrackSearchRequest):
         track_id = start_track["id"]
         seed_popularity = start_track.get("popularity", 50)
         seed_duration_ms = start_track.get("duration_ms", 0)
-        year = _track_release_year(start_track)
+        try:
+            year = _track_release_year(start_track)
+        except (ValueError, TypeError):
+            year = request.year
         genres = _seed_genres(sp, start_track, request.genre)
+        if year is None:
+            raise HTTPException(status_code=400, detail="Unable to derive year from the starting track")
 
-        search_query_parts = [f"year:{year}"]
+        search_query_parts: list[str] = []
         if genres:
-            search_query_parts.insert(0, f'genre:"{genres[0]}"')
+            search_query_parts.append(f'genre:"{genres[0]}"')
+        search_query_parts.append(f"year:{year}")
         search_query = " ".join(search_query_parts)
 
         safe_limit = min(request.limit, SpotifyService.SEARCH_PAGE_LIMIT)

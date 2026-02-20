@@ -124,6 +124,16 @@
             <label for="artistName">Artist Name:</label>
             <input type="text" id="artistName" placeholder="e.g., The Weeknd">
         </div>
+
+        <div class="form-group">
+            <label for="genre">Genre:</label>
+            <input type="text" id="genre" placeholder="e.g., pop">
+        </div>
+
+        <div class="form-group">
+            <label for="year">Year:</label>
+            <input type="number" id="year" placeholder="e.g., 2020" min="1900" max="2100">
+        </div>
         
         <button onclick="searchTrack()" id="searchBtn">Find Transitions</button>
         
@@ -142,9 +152,11 @@
         async function searchTrack() {
             const trackName = document.getElementById('trackName').value.trim();
             const artistName = document.getElementById('artistName').value.trim();
+            const genre = document.getElementById('genre').value.trim();
+            const year = Number(document.getElementById('year').value);
             
-            if (!trackName || !artistName) {
-                document.getElementById('results').innerHTML = '<div class="error">Please enter track and artist name</div>';
+            if (!trackName || !artistName || !genre || !year) {
+                document.getElementById('results').innerHTML = '<div class="error">Please enter track, artist, genre, and year</div>';
                 return;
             }
             
@@ -159,7 +171,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         track_name: trackName,
-                        artist_name: artistName
+                        artist_name: artistName,
+                        genre: genre,
+                        year: year
                     })
                 });
                 
@@ -213,6 +227,12 @@
             if (e.key === 'Enter') searchTrack();
         });
         document.getElementById('artistName').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') searchTrack();
+        });
+        document.getElementById('genre').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') searchTrack();
+        });
+        document.getElementById('year').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') searchTrack();
         });
     </script>

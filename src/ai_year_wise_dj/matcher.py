@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from ai_year_wise_dj.models import TrackFingerprint, TransitionCandidate
 
-# Maximum duration difference (ms) treated as fully dissimilar — two minutes.
-_MAX_DURATION_DIFF_MS = 120_000
+# Fallback year window used when no target year is provided in _metadata_score.
+_DEFAULT_YEAR_WINDOW = 10
 
 
 def _distance(a: float, b: float) -> float:
@@ -31,31 +31,32 @@ def _score_transition(
     pop_diff = abs(current.popularity - candidate.popularity)
     pop_score = max(0.0, 1.0 - pop_diff / 100.0)
 
-    dur_diff = abs(current.duration_ms - candidate.duration_ms)
-    dur_score = max(0.0, 1.0 - dur_diff / _MAX_DURATION_DIFF_MS)
-
     year_diff = abs(candidate.release_year - target_year)
     year_score = max(0.0, 1.0 - year_diff / max(window, 1))
 
-    total = 0.5 * pop_score + 0.2 * dur_score + 0.3 * year_score
+    total = 0.5 * pop_score + 0.5 * year_score
     reason = (
         f"popularityΔ={pop_diff}, "
-        f"yearΔ={year_diff}, "
-        f"durationΔ={dur_diff}ms"
+        f"yearΔ={year_diff}"
     )
     return total, reason
 
 
-def _metadata_score(from_fp: TrackFingerprint, to_fp: TrackFingerprint) -> tuple[float, str]:
-    """Score a transition using track metadata (popularity, duration) when audio features
+def _metadata_score(from_fp: TrackFingerprint, to_fp: TrackFingerprint,
+                    target_year: int | None = None, window: int = 2) -> tuple[float, str]:
+    """Score a transition using track metadata (popularity, year) when audio features
     are unavailable due to Spotify API restrictions."""
     popularity_penalty = _distance(from_fp.popularity, to_fp.popularity) / 100.0
-    # Normalise duration difference: cap at 60 s (60_000 ms) to keep it in [0, 1]
-    duration_penalty = min(1.0, _distance(from_fp.duration_ms, to_fp.duration_ms) / 60_000.0)
-    score = max(0.0, 1.0 - 0.6 * popularity_penalty - 0.4 * duration_penalty)
+    if target_year is not None:
+        year_diff = abs(to_fp.release_year - target_year)
+        year_penalty = min(1.0, year_diff / max(window, 1))
+    else:
+        year_diff = abs(from_fp.release_year - to_fp.release_year)
+        year_penalty = min(1.0, year_diff / _DEFAULT_YEAR_WINDOW)
+    score = max(0.0, 1.0 - 0.5 * popularity_penalty - 0.5 * year_penalty)
     reason = (
         f"popularityΔ={abs(from_fp.popularity - to_fp.popularity)}, "
-        f"durationΔ={abs(from_fp.duration_ms - to_fp.duration_ms) / 1000:.1f}s"
+        f"yearΔ={year_diff}"
     )
     return score, reason
 
@@ -78,7 +79,7 @@ def best_transition(
             continue
 
         if use_metadata:
-            score, reason = _metadata_score(current, candidate)
+            score, reason = _metadata_score(current, candidate, target_year, window)
         elif not candidate.has_audio_features:
             # Seed has audio features but this candidate doesn't — skip to
             # avoid scoring fake fallback zeros as a perfect match.
@@ -86,7 +87,7 @@ def best_transition(
         elif enforce_same_year:
             score, reason = _score_transition(current, candidate, target_year, window)
         else:
-            score, reason = _metadata_score(current, candidate)
+            score, reason = _metadata_score(current, candidate, target_year, window)
 
         match = TransitionCandidate(
             from_track_id=current.track_id,

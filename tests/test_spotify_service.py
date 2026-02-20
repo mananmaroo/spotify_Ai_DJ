@@ -153,5 +153,36 @@ class SearchTracksTests(unittest.TestCase):
             svc.search_tracks_by_year_window(year=2020, window=5, limit=25)
 
 
+class FindStartingTrackTests(unittest.TestCase):
+    def test_find_starting_track_searches_without_year(self) -> None:
+        """find_starting_track must NOT include a year filter in the search query."""
+        svc = _make_service()
+        fake_track = {"id": "t1", "name": "Song", "artists": [], "album": {"release_date": "2020-01-01"}}
+        svc.client.search = MagicMock(return_value={"tracks": {"items": [fake_track]}})
+
+        result = svc.find_starting_track("blinding lights", year=2020, window=5)
+
+        self.assertEqual(result, fake_track)
+        svc.client.search.assert_called_once()
+        called_query = svc.client.search.call_args.kwargs.get("q") or svc.client.search.call_args.args[0]
+        self.assertNotIn("year:", called_query)
+
+    def test_find_starting_track_returns_none_when_no_results(self) -> None:
+        svc = _make_service()
+        svc.client.search = MagicMock(return_value={"tracks": {"items": []}})
+
+        result = svc.find_starting_track("no match", year=2020, window=5)
+
+        self.assertIsNone(result)
+
+    def test_find_starting_track_returns_none_on_api_error(self) -> None:
+        svc = _make_service()
+        svc.client.search = MagicMock(side_effect=_make_403_spotify_exception())
+
+        result = svc.find_starting_track("some song", year=2020, window=5)
+
+        self.assertIsNone(result)
+
+
 if __name__ == "__main__":
     unittest.main()

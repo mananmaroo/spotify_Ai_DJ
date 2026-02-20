@@ -1,10 +1,10 @@
 # AI Year-Wise DJ
 
-Backend prototype for an **AI DJ brain** that creates smooth transitions between Spotify tracks released in the same year (or within a configurable ±year window).
+Backend prototype for an **AI DJ brain** that creates smooth transitions between Spotify tracks released in the same year.
 
 ## What this backend does
 
-- Searches tracks by year window using Spotify Web API.
+- Searches tracks using song + artist + genre + exact year via Spotify Web API.
 - Fetches audio features + audio analysis for candidate tracks.
 - Builds section-level energy fingerprints from Spotify analysis.
 - Finds the best transition match between the currently playing track and next candidate songs.
@@ -41,7 +41,7 @@ python -m ai_year_wise_dj.app --seed-track-id <spotify_track_id> --year 2018 --w
 ## Notes
 
 - `.env` is ignored by git to prevent secret leakage; only `.env.example` is tracked.
-- `window` controls the year search range (`year-window` to `year+window`).
+- API search uses the exact year provided by the user (no year window/range).
 - Matching currently uses section-level energy + tempo + loudness heuristics.
 - Playback control hooks are represented as interfaces/placeholders for frontend or scheduler integration.
 

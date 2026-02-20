@@ -95,7 +95,6 @@ def health_check():
 
 _POPULARITY_WEIGHT = 0.5
 _DURATION_WEIGHT = 0.3
-_YEAR_WEIGHT = 0.2
 
 
 @app.post("/api/search", response_model=DJResponse)
@@ -105,11 +104,11 @@ def search_and_get_transitions(request: TrackSearchRequest):
         sp = get_spotify_client()
 
         # Search for the starting track
-        genre_query = f'"{request.genre}"'
+        quoted_genre = f'"{request.genre}"'
         query = (
             f"track:{request.track_name} "
             f"artist:{request.artist_name} "
-            f"genre:{genre_query} "
+            f"genre:{quoted_genre} "
             f"year:{request.year}"
         )
         results = sp.search(q=query, type="track", limit=1)
@@ -124,9 +123,8 @@ def search_and_get_transitions(request: TrackSearchRequest):
         track_id = start_track["id"]
         seed_popularity = start_track.get("popularity", 50)
         seed_duration_ms = start_track.get("duration_ms", 0)
-        seed_year = request.year
-        seed_genres: list[str] = [request.genre]
-        search_query = f"genre:{genre_query} year:{request.year}"
+        genres: list[str] = [request.genre]
+        search_query = f"genre:{quoted_genre} year:{request.year}"
 
         safe_limit = min(request.limit, SpotifyService.SEARCH_PAGE_LIMIT)
         candidates_result = sp.search(q=search_query, type="track", limit=safe_limit, market="US")
@@ -149,8 +147,7 @@ def search_and_get_transitions(request: TrackSearchRequest):
             track_year = int(release_date[:4]) if release_date else 0
             popularity_penalty = abs(seed_popularity - track_popularity) / 100.0
             duration_penalty = min(1.0, abs(seed_duration_ms - track_duration_ms) / 60_000.0)
-            year_penalty = 0.0 if track_year == request.year else 1.0
-            score = max(0.0, 1.0 - _POPULARITY_WEIGHT * popularity_penalty - _DURATION_WEIGHT * duration_penalty - _YEAR_WEIGHT * year_penalty)
+            score = max(0.0, 1.0 - _POPULARITY_WEIGHT * popularity_penalty - _DURATION_WEIGHT * duration_penalty)
             next_tracks.append({
                 "id": track["id"],
                 "name": track["name"],
@@ -169,11 +166,11 @@ def search_and_get_transitions(request: TrackSearchRequest):
                 id=track_id,
                 name=start_track["name"],
                 artist=start_track["artists"][0]["name"] if start_track["artists"] else "Unknown",
-                year=seed_year,
+                year=request.year,
                 popularity=start_track.get("popularity", 0),
                 duration_ms=start_track.get("duration_ms", 0),
                 preview_url=start_track.get("preview_url"),
-                genres=seed_genres,
+                genres=genres,
             ),
             next_tracks=[
                 TrackInfo(

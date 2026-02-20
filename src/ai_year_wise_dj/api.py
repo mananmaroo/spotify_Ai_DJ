@@ -28,8 +28,8 @@ class TrackSearchRequest(BaseModel):
     """Request to search for a track by song, artist, genre, and year."""
     track_name: str
     artist_name: str
-    genre: str
-    year: int = Field(ge=1900, le=2100)
+    genre: str | None = None
+    year: int | None = Field(default=None, ge=1900, le=2100)
     limit: int = Field(default=SpotifyService.SEARCH_PAGE_LIMIT, ge=1, le=SpotifyService.SEARCH_PAGE_LIMIT)
 
 class TrackInfo(BaseModel):
@@ -68,6 +68,16 @@ def _track_release_year(track: dict) -> int:
     return int(release_date[:4])
 
 
+def _seed_genres(sp: spotipy.Spotify, track: dict, fallback_genre: str | None) -> list[str]:
+    artist_id = (track.get("artists") or [{}])[0].get("id")
+    if artist_id:
+        artist = sp.artist(artist_id)
+        artist_genres = artist.get("genres") or []
+        if artist_genres:
+            return artist_genres
+    return [fallback_genre] if fallback_genre else []
+
+
 def _score_candidate(seed: dict, candidate: dict, target_year: int, window: int) -> float:
     pop_diff = abs(seed.get("popularity", 0) - candidate.get("popularity", 0))
     pop_score = max(0.0, 1.0 - pop_diff / 100.0)
@@ -104,13 +114,12 @@ def search_and_get_transitions(request: TrackSearchRequest):
         sp = get_spotify_client()
 
         # Search for the starting track
-        quoted_genre = f'"{request.genre}"'
-        query = (
-            f"track:{request.track_name} "
-            f"artist:{request.artist_name} "
-            f"genre:{quoted_genre} "
-            f"year:{request.year}"
-        )
+        query_parts = [f"track:{request.track_name}", f"artist:{request.artist_name}"]
+        if request.genre:
+            query_parts.append(f'genre:"{request.genre}"')
+        if request.year:
+            query_parts.append(f"year:{request.year}")
+        query = " ".join(query_parts)
         results = sp.search(q=query, type="track", limit=1)
 
         if not results["tracks"]["items"]:
@@ -123,8 +132,13 @@ def search_and_get_transitions(request: TrackSearchRequest):
         track_id = start_track["id"]
         seed_popularity = start_track.get("popularity", 50)
         seed_duration_ms = start_track.get("duration_ms", 0)
-        genres: list[str] = [request.genre]
-        search_query = f"genre:{quoted_genre} year:{request.year}"
+        year = _track_release_year(start_track)
+        genres = _seed_genres(sp, start_track, request.genre)
+
+        search_query_parts = [f"year:{year}"]
+        if genres:
+            search_query_parts.insert(0, f'genre:"{genres[0]}"')
+        search_query = " ".join(search_query_parts)
 
         safe_limit = min(request.limit, SpotifyService.SEARCH_PAGE_LIMIT)
         candidates_result = sp.search(q=search_query, type="track", limit=safe_limit, market="US")
@@ -132,7 +146,7 @@ def search_and_get_transitions(request: TrackSearchRequest):
 
         # If the genre-filtered search returned nothing, fall back to exact year-only
         if not candidate_items:
-            fallback_result = sp.search(q=f"year:{request.year}", type="track", limit=safe_limit, market="US")
+            fallback_result = sp.search(q=f"year:{year}", type="track", limit=safe_limit, market="US")
             candidate_items = fallback_result["tracks"]["items"]
 
         # Rank candidates using metadata (popularity gradient + duration proximity).
@@ -166,7 +180,7 @@ def search_and_get_transitions(request: TrackSearchRequest):
                 id=track_id,
                 name=start_track["name"],
                 artist=start_track["artists"][0]["name"] if start_track["artists"] else "Unknown",
-                year=request.year,
+                year=year,
                 popularity=start_track.get("popularity", 0),
                 duration_ms=start_track.get("duration_ms", 0),
                 preview_url=start_track.get("preview_url"),

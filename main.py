@@ -1,39 +1,3 @@
-import os
-import base64
-import requests
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles  # <-- make sure this is here
-from pydantic import BaseModel
-from typing import List
-
-# =============================
-# APP SETUP
-# =============================
-
-app = FastAPI(title="AI Year-Wise DJ")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# =============================
-# HARDCODED SPOTIFY CREDENTIALS
-# ⚠️ TESTING ONLY
-# =============================
-
-SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
-SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
-
-
-# Serve frontend directly from root
-app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
-
-
 # -----------------------------
 # DATA MODELS
 # -----------------------------
@@ -95,7 +59,6 @@ def get_next_track(seed_track: dict, year_window: int = 5) -> dict:
             for t in items:
                 if t["id"] != seed_track["id"]:
                     candidates.append(t)
-
     if not candidates:
         return seed_track
     return random.choice(candidates)
@@ -110,9 +73,10 @@ def health_check():
 @app.post("/api/search", response_model=TrackResponse)
 def api_search(req: TrackRequest):
     seed = search_track(req.track_name, req.artist_name)
+    artists = [a["name"] for a in seed.get("artists", [])] if seed.get("artists") else []
     return TrackResponse(
         name=seed["name"],
-        artists=[a["name"] for a in seed.get("artists", [])],
+        artists=artists,
         release_date=seed["album"]["release_date"],
         id=seed["id"],
         uri=seed["uri"]
@@ -122,9 +86,10 @@ def api_search(req: TrackRequest):
 def api_next(req: TrackRequest):
     seed = search_track(req.track_name, req.artist_name)
     next_track = get_next_track(seed, year_window=5)
+    artists = [a["name"] for a in next_track.get("artists", [])] if next_track.get("artists") else []
     return TrackResponse(
         name=next_track["name"],
-        artists=[a["name"] for a in next_track.get("artists", [])],
+        artists=artists,
         release_date=next_track["album"]["release_date"],
         id=next_track["id"],
         uri=next_track["uri"]

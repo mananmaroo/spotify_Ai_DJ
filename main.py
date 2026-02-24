@@ -1,111 +1,140 @@
-from __future__ import annotations
 import os
-from typing import Optional
-from fastapi import FastAPI, Request, HTTPException
+import base64
+import requests
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from spotify_service import SpotifyService
-from analysis import build_track_fingerprint
-from matcher import best_transition
-from models import TrackFingerprint, TransitionCandidate
+from pydantic import BaseModel
 
-app = FastAPI(title="AI Year-Wise DJ")
+app = FastAPI()
 
-# -----------------------------
-# CORS
-# -----------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-service = SpotifyService()
+SPOTIFY_CLIENT_ID = os.getenv("SPOTIFY_CLIENT_ID")
+SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIFY_CLIENT_SECRET")
 
-# -----------------------------
-# Search track
-# -----------------------------
+# ----------- MODELS -----------
+
+class SearchRequest(BaseModel):
+    track_name: str
+    artist_name: str
+
+class NextTrackRequest(BaseModel):
+    seed_track_id: str
+    year: int
+    window: int = 5
+
+
+# ----------- SPOTIFY AUTH -----------
+
+def get_spotify_token():
+    auth_string = f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}"
+    auth_bytes = auth_string.encode("utf-8")
+    auth_base64 = str(base64.b64encode(auth_bytes), "utf-8")
+
+    url = "https://accounts.spotify.com/api/token"
+    headers = {
+        "Authorization": f"Basic {auth_base64}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    data = {"grant_type": "client_credentials"}
+
+    result = requests.post(url, headers=headers, data=data)
+    json_result = result.json()
+    return json_result["access_token"]
+
+
+# ----------- SEARCH TRACK -----------
+
 @app.post("/api/search")
-async def search_track(request: Request):
-    body = await request.json()
-    track_name = body.get("track_name")
-    artist_name = body.get("artist_name")
-    if not track_name or not artist_name:
-        raise HTTPException(status_code=400, detail="track_name & artist_name required")
+def search_track(req: SearchRequest):
+    token = get_spotify_token()
 
-    query = f"track:{track_name} artist:{artist_name}"
-    result = service.client.search(q=query, type="track", limit=1)
-    items = result.get("tracks", {}).get("items", [])
-    if not items:
-        raise HTTPException(status_code=404, detail="Track not found")
-    return items[0]
+    query = f"track:{req.track_name} artist:{req.artist_name}"
+    url = f"https://api.spotify.com/v1/search?q={query}&type=track&limit=1"
 
-# -----------------------------
-# Get artist info (for genres)
-# -----------------------------
-@app.get("/api/artist/{artist_id}")
-async def get_artist(artist_id: str):
-    artist = service.client.artist(artist_id)
+    headers = {"Authorization": f"Bearer {token}"}
+    result = requests.get(url, headers=headers)
+    data = result.json()
+
+    if not data["tracks"]["items"]:
+        return {"error": "Track not found"}
+
+    track = data["tracks"]["items"][0]
+
+    # Return SAFE cleaned object (no genres anywhere)
     return {
-        "genres": artist.get("genres") or [],
-        "name": artist.get("name") or ""
+        "id": track["id"],
+        "name": track["name"],
+        "album": {
+            "release_date": track["album"]["release_date"]
+        },
+        "artists": [
+            {
+                "id": artist["id"],
+                "name": artist["name"]
+            }
+            for artist in track["artists"]
+        ],
+        "popularity": track["popularity"],
+        "duration_ms": track["duration_ms"]
     }
 
-# -----------------------------
-# Get next track
-# -----------------------------
+
+# ----------- NEXT TRACK -----------
+
 @app.post("/api/next-track")
-async def next_track(request: Request):
-    body = await request.json()
-    seed_track_id = body.get("seed_track_id")
-    if not seed_track_id:
-        raise HTTPException(status_code=400, detail="seed_track_id required")
+def get_next_track(req: NextTrackRequest):
+    token = get_spotify_token()
 
-    year = body.get("year", 2018)
-    window = body.get("window", 5)
+    min_year = req.year - req.window
+    max_year = req.year + req.window
 
-    # Hydrate seed track
-    seed_track = service.hydrate_track(seed_track_id)
-    seed_analysis = service.get_audio_analysis(seed_track_id)
-    seed_fp = build_track_fingerprint(seed_track, audio_analysis=seed_analysis)
-
-    # Get candidate tracks
-    rec_tracks = service.get_recommendations([seed_track_id], limit=25)
-    fingerprints = []
-    for t in rec_tracks:
-        analysis = service.get_audio_analysis(t["id"])
-        fingerprints.append(build_track_fingerprint(t, audio_analysis=analysis))
-
-    match: Optional[TransitionCandidate] = best_transition(
-        seed_fp, fingerprints, target_year=year, window=window
+    url = (
+        f"https://api.spotify.com/v1/recommendations?"
+        f"seed_tracks={req.seed_track_id}"
+        f"&min_popularity=20"
+        f"&limit=10"
     )
 
-    if not match:
-        raise HTTPException(status_code=404, detail="No suitable transition found")
+    headers = {"Authorization": f"Bearer {token}"}
+    result = requests.get(url, headers=headers)
+    data = result.json()
+
+    if not data["tracks"]:
+        return {"error": "No recommendations found"}
+
+    candidates = []
+
+    for track in data["tracks"]:
+        release_year = int(track["album"]["release_date"][:4])
+
+        if min_year <= release_year <= max_year:
+            score = 100 - abs(req.year - release_year)
+
+            candidates.append({
+                "id": track["id"],
+                "name": track["name"],
+                "artists": [a["name"] for a in track["artists"]],
+                "year": release_year,
+                "score": score
+            })
+
+    if not candidates:
+        return {"error": "No tracks in year window"}
+
+    best_track = sorted(candidates, key=lambda x: x["score"], reverse=True)[0]
 
     return {
-        "next_track_id": match.to_track_id,
-        "score": match.score,
-        "reason": match.reason,
+        "next_track_id": best_track["id"],
+        "name": best_track["name"],
+        "artists": best_track["artists"],
+        "year": best_track["year"],
+        "score": best_track["score"],
+        "reason": "Closest year match for smooth transition"
     }
-
-# -----------------------------
-# Serve React frontend
-# -----------------------------
-DIST_DIR = "dist"
-if os.path.exists(DIST_DIR):
-    app.mount("/", StaticFiles(directory=DIST_DIR, html=True), name="static")
-else:
-    print(f"Warning: {DIST_DIR} directory does not exist.")
-
-@app.get("/{full_path:path}")
-async def serve_react_app(full_path: str):
-    file_path = os.path.join(DIST_DIR, full_path)
-    if os.path.exists(file_path):
-        return FileResponse(file_path)
-    index_path = os.path.join(DIST_DIR, "index.html")
-    if os.path.exists(index_path):
-        return FileResponse(index_path)
-    return {"message": "Frontend not built yet."}

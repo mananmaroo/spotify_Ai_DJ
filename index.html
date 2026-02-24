@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI DJ</title>
 
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
@@ -32,7 +32,7 @@ button:hover {opacity:0.9;}
 <script>
 let spotifyPlayer;
 let deviceId = null;
-let userAccessToken = null; // Must be set via Spotify OAuth
+let userAccessToken = null; // Set via Spotify OAuth
 
 async function searchTrack() {
     const trackName = document.getElementById("trackName").value;
@@ -43,34 +43,39 @@ async function searchTrack() {
         const searchRes = await fetch("/api/search", {
             method: "POST",
             headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({track_name: trackName, artist_name: artistName})
+            body: JSON.stringify({ track_name: trackName, artist_name: artistName })
         });
         const track = await searchRes.json();
+
+        const releaseYear = track.release_date ? track.release_date.slice(0,4) : "N/A";
 
         document.getElementById("seedTrack").style.display = "block";
         document.getElementById("seedTrack").innerHTML = `
             <h3>Seed Track</h3>
             <p>${track.name}</p>
-            <p>Year: ${track.release_date.slice(0,4)}</p>
+            <p>Year: ${releaseYear}</p>
         `;
 
         const nextRes = await fetch("/api/next-track", {
             method: "POST",
             headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({track_name: trackName, artist_name: artistName})
+            body: JSON.stringify({ track_name: trackName, artist_name: artistName })
         });
         const nextTrack = await nextRes.json();
+
+        const nextYear = nextTrack.release_date ? nextTrack.release_date.slice(0,4) : "N/A";
 
         document.getElementById("nextTrack").style.display = "block";
         document.getElementById("nextTrack").innerHTML = `
             <h3>Next Track</h3>
             <p>${nextTrack.name}</p>
             <p>${nextTrack.artists.join(", ")}</p>
-            <p>Year: ${nextTrack.release_date.slice(0,4)}</p>
+            <p>Year: ${nextYear}</p>
             <button onclick="playTrack('${nextTrack.id}')">▶ Play Next Track</button>
         `;
     } catch(err) {
         document.getElementById("error").innerText = err.message;
+        console.error(err);
     }
 }
 
@@ -92,6 +97,7 @@ window.onSpotifyWebPlaybackSDKReady = () => {
 
 async function playTrack(trackId) {
     if(!userAccessToken) return alert("Spotify OAuth required to play tracks");
+
     await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
         method:"PUT",
         headers:{

@@ -4,6 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import requests
 import base64
+import random
 
 # -----------------------------
 # Spotify Credentials (hardcoded for now)
@@ -11,11 +12,11 @@ import base64
 SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
 SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
 
-
 # -----------------------------
-# FastAPI app
+# APP SETUP
 # -----------------------------
 app = FastAPI(title="AI Year-Wise DJ")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -23,10 +24,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve frontend directly from root
 app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
 
 # -----------------------------
-# Data models
+# DATA MODELS
 # -----------------------------
 class TrackRequest(BaseModel):
     track_name: str
@@ -40,24 +43,16 @@ class TrackResponse(BaseModel):
     uri: str
 
 # -----------------------------
-# Spotify helper functions
+# HELPER FUNCTIONS
 # -----------------------------
 def get_spotify_token() -> str:
-    auth_header = base64.b64encode(f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()).decode()
+    auth_header = base64.b64encode(f"{spotify_client_id}:{spotify_client_secret}".encode()).decode()
     headers = {"Authorization": f"Basic {auth_header}"}
     data = {"grant_type": "client_credentials"}
     response = requests.post("https://accounts.spotify.com/api/token", headers=headers, data=data)
     if response.status_code != 200:
-        raise HTTPException(status_code=500, detail=f"Spotify token error: {response.text}")
-    return response.json().get("access_token", "")
-
-def safe_str(val, default="Unknown"):
-    return str(val) if val else default
-
-def safe_artists(track):
-    if not track or not track.get("artists"):
-        return ["Unknown"]
-    return [a.get("name", "Unknown") for a in track.get("artists", [])]
+        raise HTTPException(status_code=500, detail="Spotify token error")
+    return response.json()["access_token"]
 
 def search_track(name: str, artist: str) -> dict:
     token = get_spotify_token()
@@ -68,74 +63,62 @@ def search_track(name: str, artist: str) -> dict:
         headers=headers,
         params={"q": query, "type": "track", "limit": 1}
     )
-    if response.status_code != 200:
-        raise HTTPException(status_code=500, detail=f"Spotify search error: {response.text}")
     items = response.json().get("tracks", {}).get("items", [])
     if not items:
-        raise HTTPException(status_code=404, detail="Track not found on Spotify")
+        return {}
     return items[0]
 
-def fetch_tracks(query: str, limit: int = 10) -> list:
+def get_next_track(seed_track: dict, year_window: int = 2) -> dict:
     token = get_spotify_token()
     headers = {"Authorization": f"Bearer {token}"}
-    response = requests.get(
-        "https://api.spotify.com/v1/search",
-        headers=headers,
-        params={"q": query, "type": "track", "limit": limit}
-    )
-    if response.status_code != 200:
-        return []
-    return response.json().get("tracks", {}).get("items", [])
+    seed_year = int(seed_track.get("album", {}).get("release_date", "0")[:4] or 0)
+    choices = []
 
-def get_next_track(seed_track: dict, year_window: int = 2) -> dict:
-    release_date = seed_track.get("album", {}).get("release_date", "")
-    try:
-        seed_year = int(release_date[:4])
-    except Exception:
-        seed_year = 2020
-    artist_ids = [a.get("id") for a in seed_track.get("artists", []) if a.get("id")]
+    # 50/50: same artist or year +/- window
+    if "artists" in seed_track:
+        # 1. Same artist, different song
+        artist_id = seed_track["artists"][0]["id"]
+        r = requests.get(
+            "https://api.spotify.com/v1/search",
+            headers=headers,
+            params={"q": f"artist:{artist_id}", "type": "track", "limit": 10}
+        )
+        choices.extend([t for t in r.json().get("tracks", {}).get("items", []) if t["id"] != seed_track.get("id")])
 
-    candidates = []
+    # 2. Year window
+    for delta in range(-year_window, year_window+1):
+        y = seed_year + delta
+        r = requests.get(
+            "https://api.spotify.com/v1/search",
+            headers=headers,
+            params={"q": f"year:{y}", "type": "track", "limit": 5}
+        )
+        choices.extend([t for t in r.json().get("tracks", {}).get("items", []) if t["id"] != seed_track.get("id")])
 
-    # 1️⃣ Same year
-    same_year_tracks = fetch_tracks(f"year:{seed_year}", limit=5)
-    same_year_tracks = [t for t in same_year_tracks if t.get("id") != seed_track.get("id")]
-    if same_year_tracks:
-        candidates.append(same_year_tracks)
+    if not choices:
+        return seed_track  # fallback
 
-    # 2️⃣ Same artist
-    if artist_ids:
-        for aid in artist_ids:
-            artist_tracks = fetch_tracks(f"artist:{aid}", limit=5)
-            artist_tracks = [t for t in artist_tracks if t.get("id") != seed_track.get("id")]
-            if artist_tracks:
-                candidates.append(artist_tracks)
-
-    # 3️⃣ ±2 years
-    year_range_tracks = []
-    for delta in range(1, year_window + 1):
-        for y in [seed_year - delta, seed_year + delta]:
-            tracks = fetch_tracks(f"year:{y}", limit=5)
-            tracks = [t for t in tracks if t.get("id") != seed_track.get("id")]
-            year_range_tracks.extend(tracks)
-    if year_range_tracks:
-        candidates.append(year_range_tracks)
-
-    # Randomly pick one group, then one track from that group
-    if candidates:
-        group = random.choice(candidates)
-        return random.choice(group)
-
-    return seed_track
+    return random.choice(choices)
 
 # -----------------------------
-# API routes
+# SAFETY HELPERS
+# -----------------------------
+def safe_str(val):
+    return val if val else "Unknown"
+
+def safe_artists(track: dict):
+    if not track or "artists" not in track:
+        return ["Unknown"]
+    return [a.get("name", "Unknown") for a in track.get("artists", [])]
+
+# -----------------------------
+# ROUTES
 # -----------------------------
 @app.get("/api/health")
 def health_check():
     return {"status": "AI DJ backend running"}
 
-@app.post("/api/search", response_model=TrackResponse)
+@app.api_route("/api/search", methods=["POST"], response_model=TrackResponse)
 def api_search(req: TrackRequest):
     seed = search_track(req.track_name, req.artist_name)
     return TrackResponse(
@@ -146,7 +129,7 @@ def api_search(req: TrackRequest):
         uri=safe_str(seed.get("uri"))
     )
 
-@app.post("/api/next-track", response_model=TrackResponse)
+@app.api_route("/api/next-track", methods=["POST"], response_model=TrackResponse)
 def api_next(req: TrackRequest):
     seed = search_track(req.track_name, req.artist_name)
     next_track = get_next_track(seed, year_window=2)

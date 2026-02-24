@@ -47,13 +47,12 @@ async function searchTrack() {
         });
         const track = await searchRes.json();
 
-        const releaseYear = track.release_date ? track.release_date.slice(0,4) : "N/A";
-
         document.getElementById("seedTrack").style.display = "block";
         document.getElementById("seedTrack").innerHTML = `
             <h3>Seed Track</h3>
             <p>${track.name}</p>
-            <p>Year: ${releaseYear}</p>
+            <p>Year: ${track.release_date ? track.release_date.slice(0,4) : "N/A"}</p>
+            <p>${Array.isArray(track.artists) ? track.artists.join(", ") : track.artists || "Unknown"}</p>
         `;
 
         const nextRes = await fetch("/api/next-track", {
@@ -63,14 +62,12 @@ async function searchTrack() {
         });
         const nextTrack = await nextRes.json();
 
-        const nextYear = nextTrack.release_date ? nextTrack.release_date.slice(0,4) : "N/A";
-
         document.getElementById("nextTrack").style.display = "block";
         document.getElementById("nextTrack").innerHTML = `
             <h3>Next Track</h3>
             <p>${nextTrack.name}</p>
-            <p>${nextTrack.artists.join(", ")}</p>
-            <p>Year: ${nextYear}</p>
+            <p>${Array.isArray(nextTrack.artists) ? nextTrack.artists.join(", ") : nextTrack.artists || "Unknown"}</p>
+            <p>Year: ${nextTrack.release_date ? nextTrack.release_date.slice(0,4) : "N/A"}</p>
             <button onclick="playTrack('${nextTrack.id}')">▶ Play Next Track</button>
         `;
     } catch(err) {
@@ -89,7 +86,7 @@ window.onSpotifyWebPlaybackSDKReady = () => {
 
     spotifyPlayer.addListener('ready', ({device_id}) => {
         deviceId = device_id;
-        console.log('Device ready:', device_id);
+        console.log('Device ready:', deviceId);
     });
 
     spotifyPlayer.connect();

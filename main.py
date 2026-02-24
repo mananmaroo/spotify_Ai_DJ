@@ -1,8 +1,6 @@
-# main.py
 from __future__ import annotations
 import os
 from typing import Optional
-
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -33,6 +31,27 @@ def get_token_from_header(request: Request) -> str:
     if not auth or not auth.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing access token")
     return auth.split(" ")[1]
+
+# -----------------------------
+# API: Search track
+# -----------------------------
+@app.post("/api/search")
+async def search_track(request: Request):
+    body = await request.json()
+    track_name = body.get("track_name")
+    artist_name = body.get("artist_name")
+    if not track_name or not artist_name:
+        raise HTTPException(status_code=400, detail="track_name & artist_name required")
+
+    token = get_token_from_header(request)
+    service = SpotifyService(token)
+
+    query = f"track:{track_name} artist:{artist_name}"
+    result = service.client.search(q=query, type="track", limit=1)
+    items = result.get("tracks", {}).get("items", [])
+    if not items:
+        raise HTTPException(status_code=404, detail="Track not found")
+    return items[0]
 
 # -----------------------------
 # API: Next track

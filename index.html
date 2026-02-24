@@ -4,126 +4,112 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AI DJ</title>
-  <script src="https://sdk.scdn.co/spotify-player.js"></script>
   <style>
     body {
-      font-family: "Arial", sans-serif;
-      background-color: #f5f0e6;
-      color: #3e3e3e;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #fdf6e3;
+      color: #333;
       text-align: center;
-      padding: 50px;
+      padding: 40px;
     }
+
     input, button {
-      padding: 12px;
+      padding: 12px 16px;
       margin: 8px;
       border-radius: 6px;
       border: 1px solid #ccc;
+      font-size: 16px;
     }
+
     button {
-      background-color: #d4b996;
-      color: #fff;
+      background-color: #c19a6b;
+      color: white;
       cursor: pointer;
-      font-weight: bold;
       border: none;
     }
-    button:hover { opacity: 0.85; }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
     .card {
-      background: #fff3e6;
+      background: #fff8f0;
       padding: 20px;
       margin-top: 20px;
-      border-radius: 12px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      text-align: left;
     }
-    h1 { color: #a37c5b; }
+
+    h1 {
+      color: #b5835a;
+    }
+
+    .section-title {
+      color: #b5835a;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
+
   <h1>🎵 AI DJ</h1>
 
   <div>
     <input id="trackName" placeholder="Track Name" />
     <input id="artistName" placeholder="Artist Name" />
-    <button onclick="searchTrack()">Find Transition</button>
+    <button onclick="searchTrack()">Find Next Track</button>
   </div>
 
-  <div id="error" style="color:red; margin-top:10px;"></div>
+  <div id="error" style="color:red; margin-top: 10px;"></div>
 
   <div id="seedTrack" class="card" style="display:none;"></div>
   <div id="nextTrack" class="card" style="display:none;"></div>
 
   <script>
-    let spotifyPlayer;
-    let deviceId = null;
-    let userAccessToken = null; // OAuth required for playback
-
     async function searchTrack() {
       const trackName = document.getElementById("trackName").value;
       const artistName = document.getElementById("artistName").value;
       document.getElementById("error").innerText = "";
 
       try {
-        // Seed track
-        const res = await fetch("/api/search", {
+        // Search seed track
+        const searchRes = await fetch("/api/search", {
           method: "POST",
-          headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({ track_name: trackName, artist_name: artistName })
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({track_name: trackName, artist_name: artistName})
         });
-        const track = await res.json();
-        const releaseYear = track.release_date ? track.release_date.slice(0,4) : "Unknown";
+        const seedTrack = await searchRes.json();
+
         document.getElementById("seedTrack").style.display = "block";
         document.getElementById("seedTrack").innerHTML = `
-          <h3>Seed Track</h3>
-          <p>${track.name}</p>
-          <p>Artist: ${track.artists.join(", ")}</p>
-          <p>Year: ${releaseYear}</p>
+          <h3 class="section-title">Seed Track</h3>
+          <p><strong>Name:</strong> ${seedTrack.name}</p>
+          <p><strong>Artist:</strong> ${seedTrack.artists.join(", ")}</p>
+          <p><strong>Year:</strong> ${seedTrack.release_date || "Unknown"}</p>
         `;
 
-        // Next track
+        // Get next track
         const nextRes = await fetch("/api/next-track", {
           method: "POST",
-          headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({ track_name: trackName, artist_name: artistName })
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({track_name: trackName, artist_name: artistName})
         });
         const nextTrack = await nextRes.json();
-        const nextYear = nextTrack.release_date ? nextTrack.release_date.slice(0,4) : "Unknown";
+
         document.getElementById("nextTrack").style.display = "block";
         document.getElementById("nextTrack").innerHTML = `
-          <h3>Next Track</h3>
-          <p>${nextTrack.name}</p>
-          <p>Artist: ${nextTrack.artists.join(", ")}</p>
-          <p>Year: ${nextYear}</p>
-          <button onclick="playTrack('${nextTrack.id}')">▶ Play Next Track</button>
+          <h3 class="section-title">Next Track</h3>
+          <p><strong>Name:</strong> ${nextTrack.name}</p>
+          <p><strong>Artist:</strong> ${nextTrack.artists.join(", ")}</p>
+          <p><strong>Year:</strong> ${nextTrack.release_date || "Unknown"}</p>
+          <p style="color:#999; font-size:14px;">*Spotify OAuth required to play tracks</p>
         `;
 
-      } catch(err) {
+      } catch (err) {
         console.error(err);
-        document.getElementById("error").innerText = err.message;
+        document.getElementById("error").innerText = err.message || "An error occurred";
       }
-    }
-
-    window.onSpotifyWebPlaybackSDKReady = () => {
-      spotifyPlayer = new Spotify.Player({
-        name: "AI DJ Player",
-        getOAuthToken: cb => { cb(userAccessToken); },
-        volume: 0.5
-      });
-      spotifyPlayer.addListener('ready', ({ device_id }) => { deviceId = device_id; console.log('Device Ready:', device_id); });
-      spotifyPlayer.connect();
-    };
-
-    async function playTrack(trackId){
-      if(!userAccessToken){
-        alert("Spotify OAuth required to play tracks.");
-        return;
-      }
-      await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
-        method:"PUT",
-        headers:{
-          "Authorization":`Bearer ${userAccessToken}`,
-          "Content-Type":"application/json"
-        },
-        body: JSON.stringify({ uris:[`spotify:track:${trackId}`] })
-      });
     }
   </script>
 </body>

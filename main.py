@@ -1,20 +1,25 @@
 import os
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from spotify_service import SpotifyService
 from analysis import build_track_fingerprint
 from matcher import best_transition
 
 app = FastAPI()
 
+# Allow your own domain only in production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # restrict in production
+    allow_origins=["*"],  # change to your render frontend URL after deploy
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ==========================
+# API ROUTE
+# ==========================
 
 def get_token_from_header(request: Request):
     auth = request.headers.get("Authorization")
@@ -59,3 +64,17 @@ async def next_track(request: Request):
         "score": match.score,
         "reason": match.reason,
     }
+
+# ==========================
+# SERVE FRONTEND (VITE BUILD)
+# ==========================
+
+if os.path.exists("dist"):
+    app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_react_app(full_path: str):
+        file_path = os.path.join("dist", full_path)
+        if os.path.exists(file_path):
+            return FileResponse(file_path)
+        return FileResponse("dist/index.html")

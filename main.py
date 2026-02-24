@@ -9,7 +9,7 @@ from pydantic import BaseModel
 # -----------------------------
 # APP SETUP
 # -----------------------------
-app = FastAPI(title="AI Year-Wise DJ")
+app = FastAPI(title="AI DJ Backend")
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,7 +40,7 @@ class TrackResponse(BaseModel):
     uri: str
 
 # -----------------------------
-# HELPERS
+# SPOTIFY HELPERS
 # -----------------------------
 def get_spotify_token() -> str:
     auth_header = base64.b64encode(f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()).decode()
@@ -67,31 +67,23 @@ def search_track(name: str, artist: str) -> dict:
         raise HTTPException(status_code=404, detail="Track not found on Spotify")
     return items[0]
 
-def get_next_track(seed_track: dict, year_window: int = 5) -> dict:
+def get_next_track(seed_track_id: str, limit: int = 3) -> dict:
     token = get_spotify_token()
     headers = {"Authorization": f"Bearer {token}"}
-    seed_year = int(seed_track["album"]["release_date"][:4])
-    candidates = []
-
-    for delta in range(year_window + 1):
-        years_to_try = [seed_year - delta, seed_year + delta]
-        for y in years_to_try:
-            query = f"year:{y}"
-            response = requests.get(
-                "https://api.spotify.com/v1/search",
-                headers=headers,
-                params={"q": query, "type": "track", "limit": 10}
-            )
-            items = response.json().get("tracks", {}).get("items", [])
-            for t in items:
-                if t["id"] != seed_track["id"]:
-                    candidates.append(t)
-    if not candidates:
-        return seed_track
-    return random.choice(candidates)
+    response = requests.get(
+        "https://api.spotify.com/v1/recommendations",
+        headers=headers,
+        params={"seed_tracks": seed_track_id, "limit": limit}
+    )
+    if response.status_code != 200:
+        raise HTTPException(status_code=500, detail=f"Spotify recommendations error: {response.text}")
+    items = response.json().get("tracks", [])
+    if not items:
+        raise HTTPException(status_code=404, detail="No recommendations found")
+    return random.choice(items)
 
 # -----------------------------
-# API ROUTES
+# ROUTES
 # -----------------------------
 @app.get("/")
 def serve_index():
@@ -116,7 +108,7 @@ def api_search(req: TrackRequest):
 @app.post("/api/next-track", response_model=TrackResponse)
 def api_next(req: TrackRequest):
     seed = search_track(req.track_name, req.artist_name)
-    next_track = get_next_track(seed, year_window=5)
+    next_track = get_next_track(seed["id"])
     artists = [a["name"] for a in next_track.get("artists", [])] if next_track.get("artists") else []
     return TrackResponse(
         name=next_track["name"],

@@ -8,7 +8,6 @@ class SpotifyService:
         client_secret = os.getenv("SPOTIPY_CLIENT_SECRET")
         if not client_id or not client_secret:
             raise ValueError("Missing Spotify client ID or secret")
-
         self.client = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
             client_id=client_id,
             client_secret=client_secret

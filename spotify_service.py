@@ -1,7 +1,3 @@
-# spotify_service.py
-import os
-from typing import Iterable
-import requests
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 
@@ -9,7 +5,7 @@ class SpotifyService:
     def __init__(self, token: str):
         self.token = token
         self.client = spotipy.Spotify(auth_manager=SpotifyClientCredentials())
-    
+
     def hydrate_track(self, track_id: str) -> dict:
         return self.client.track(track_id, market="US")
 

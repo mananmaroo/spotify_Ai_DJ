@@ -3,8 +3,8 @@ import random
 import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel  # <-- This fixes the NameError
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 
 # -----------------------------
 # APP SETUP
@@ -20,12 +20,7 @@ app.add_middleware(
 )
 
 # -----------------------------
-# SERVE FRONTEND FROM ROOT
-# -----------------------------
-app.mount("/static", StaticFiles(directory=".", html=True), name="frontend")
-
-# -----------------------------
-# SPOTIFY CREDENTIALS (hard-coded)
+# SPOTIFY CREDENTIALS
 # -----------------------------
 SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
 SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
@@ -45,7 +40,7 @@ class TrackResponse(BaseModel):
     uri: str
 
 # -----------------------------
-# HELPER FUNCTIONS
+# HELPERS
 # -----------------------------
 def get_spotify_token() -> str:
     auth_header = base64.b64encode(f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()).decode()
@@ -98,6 +93,10 @@ def get_next_track(seed_track: dict, year_window: int = 5) -> dict:
 # -----------------------------
 # API ROUTES
 # -----------------------------
+@app.get("/")
+def serve_index():
+    return FileResponse("index.html")
+
 @app.get("/api/health")
 def health_check():
     return {"status": "AI DJ backend running"}

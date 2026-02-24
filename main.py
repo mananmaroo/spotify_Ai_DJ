@@ -1,8 +1,11 @@
+import os
 import base64
 import requests
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles  # <-- make sure this is here
 from pydantic import BaseModel
+from typing import List
 
 # =============================
 # APP SETUP

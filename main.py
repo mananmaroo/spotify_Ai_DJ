@@ -8,8 +8,8 @@ import base64
 # -----------------------------
 # Spotify Credentials (hardcoded for now)
 # -----------------------------
-SPOTIFY_CLIENT_ID = "YOUR_SPOTIFY_CLIENT_ID"
-SPOTIFY_CLIENT_SECRET = "YOUR_SPOTIFY_CLIENT_SECRET"
+SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
+SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
 
 # -----------------------------
 # App setup

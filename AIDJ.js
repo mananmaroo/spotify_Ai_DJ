@@ -14,6 +14,7 @@ export default function AIDJ() {
     e.preventDefault();
     try {
       setError("");
+
       // Search track
       const searchRes = await fetch("/api/search", {
         method: "POST",
@@ -25,21 +26,30 @@ export default function AIDJ() {
       setSeedTrack(track);
 
       // Populate year
-      setYear(parseInt(track.album.release_date.slice(0, 4)));
+      const releaseYear = parseInt(track.album.release_date.slice(0, 4));
+      setYear(releaseYear);
 
-      // Populate genres
+      // Populate genres safely
       const artistIds = track.artists.map(a => a.id);
       const genreResponses = await Promise.all(
-        artistIds.map(id => fetch(`/api/artist/${id}`).then(r => r.json()))
+        artistIds.map(id =>
+          fetch(`/api/artist/${id}`)
+            .then(r => r.json())
+            .catch(() => ({ genres: [] }))
+        )
       );
-      const trackGenres = [...new Set(genreResponses.flatMap(a => a.genres))];
+      const trackGenres = [
+        ...new Set(
+          genreResponses.flatMap(a => Array.isArray(a.genres) ? a.genres : [])
+        )
+      ];
       setGenres(trackGenres);
 
       // Get next track
       const nextRes = await fetch("/api/next-track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seed_track_id: track.id, year: year, window: 5 }),
+        body: JSON.stringify({ seed_track_id: track.id, year: releaseYear, window: 5 }),
       });
       if (!nextRes.ok) throw new Error("Next track failed");
       const nextData = await nextRes.json();
@@ -48,7 +58,6 @@ export default function AIDJ() {
       // Play track in Web Playback SDK
       if (player && track.id) {
         await player.connect();
-        await player.togglePlay(); // starts playback if needed
         await fetch(`https://api.spotify.com/v1/me/player/play`, {
           method: "PUT",
           body: JSON.stringify({ uris: [`spotify:track:${track.id}`] }),
@@ -58,6 +67,7 @@ export default function AIDJ() {
           },
         });
       }
+
     } catch (err) {
       console.error(err);
       setError(err.message);
@@ -65,9 +75,8 @@ export default function AIDJ() {
   };
 
   useEffect(() => {
-    // Spotify Web Playback SDK
     window.onSpotifyWebPlaybackSDKReady = () => {
-      const token = localStorage.getItem("sp_token"); // from your OAuth flow
+      const token = localStorage.getItem("sp_token"); // user OAuth token
       const player = new window.Spotify.Player({
         name: "AI DJ Player",
         getOAuthToken: cb => cb(token),

@@ -5,7 +5,6 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-
 from spotify_service import SpotifyService
 from analysis import build_track_fingerprint
 from matcher import best_transition
@@ -23,8 +22,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+service = SpotifyService()
+
 # -----------------------------
-# API: Search track
+# Search track
 # -----------------------------
 @app.post("/api/search")
 async def search_track(request: Request):
@@ -34,8 +35,6 @@ async def search_track(request: Request):
     if not track_name or not artist_name:
         raise HTTPException(status_code=400, detail="track_name & artist_name required")
 
-    service = SpotifyService()
-
     query = f"track:{track_name} artist:{artist_name}"
     result = service.client.search(q=query, type="track", limit=1)
     items = result.get("tracks", {}).get("items", [])
@@ -44,9 +43,17 @@ async def search_track(request: Request):
     return items[0]
 
 # -----------------------------
-# API: Next track
+# Get artist info (for genres)
 # -----------------------------
-@app.post("/next-track")
+@app.get("/api/artist/{artist_id}")
+async def get_artist(artist_id: str):
+    artist = service.client.artist(artist_id)
+    return {"genres": artist.get("genres", []), "name": artist.get("name")}
+
+# -----------------------------
+# Get next track
+# -----------------------------
+@app.post("/api/next-track")
 async def next_track(request: Request):
     body = await request.json()
     seed_track_id = body.get("seed_track_id")
@@ -55,8 +62,6 @@ async def next_track(request: Request):
 
     year = body.get("year", 2018)
     window = body.get("window", 5)
-
-    service = SpotifyService()
 
     # Hydrate seed track
     seed_track = service.hydrate_track(seed_track_id)
@@ -84,14 +89,13 @@ async def next_track(request: Request):
     }
 
 # -----------------------------
-# Serve React frontend (dist/)
+# Serve React frontend
 # -----------------------------
 DIST_DIR = "dist"
-
 if os.path.exists(DIST_DIR):
     app.mount("/", StaticFiles(directory=DIST_DIR, html=True), name="static")
 else:
-    print(f"Warning: {DIST_DIR} directory does not exist. Frontend not mounted.")
+    print(f"Warning: {DIST_DIR} directory does not exist.")
 
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str):

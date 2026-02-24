@@ -48,7 +48,10 @@ async def search_track(request: Request):
 @app.get("/api/artist/{artist_id}")
 async def get_artist(artist_id: str):
     artist = service.client.artist(artist_id)
-    return {"genres": artist.get("genres", []), "name": artist.get("name")}
+    return {
+        "genres": artist.get("genres") or [],
+        "name": artist.get("name") or ""
+    }
 
 # -----------------------------
 # Get next track

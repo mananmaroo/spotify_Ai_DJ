@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 export default function AIDJ() {
   const [trackName, setTrackName] = useState("");
@@ -10,31 +10,38 @@ export default function AIDJ() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    try {
-      setError("");
+    setError("");
 
-      // 1️⃣ Search Track
+    try {
+      // SEARCH
       const searchRes = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ track_name: trackName, artist_name: artistName }),
       });
-      if (!searchRes.ok) throw new Error("Track search failed");
+
       const track = await searchRes.json();
+      if (track.error) throw new Error(track.error);
+
       setSeedTrack(track);
 
-      // 2️⃣ Extract release year
       const releaseYear = parseInt(track.album.release_date.slice(0, 4));
       setYear(releaseYear);
 
-      // 3️⃣ Get next track
+      // NEXT TRACK
       const nextRes = await fetch("/api/next-track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seed_track_id: track.id, year: releaseYear, window: 5 }),
+        body: JSON.stringify({
+          seed_track_id: track.id,
+          year: releaseYear,
+          window: 5
+        }),
       });
-      if (!nextRes.ok) throw new Error("Next track fetch failed");
+
       const nextData = await nextRes.json();
+      if (nextData.error) throw new Error(nextData.error);
+
       setNextTrack(nextData);
 
     } catch (err) {
@@ -46,36 +53,41 @@ export default function AIDJ() {
   return (
     <div style={{ maxWidth: 500, margin: "auto", textAlign: "center" }}>
       <h1>🎵 AI DJ</h1>
+
       <form onSubmit={handleSubmit}>
         <input
           placeholder="Track Name"
           value={trackName}
-          onChange={e => setTrackName(e.target.value)}
+          onChange={(e) => setTrackName(e.target.value)}
           required
         />
         <input
           placeholder="Artist Name"
           value={artistName}
-          onChange={e => setArtistName(e.target.value)}
+          onChange={(e) => setArtistName(e.target.value)}
           required
         />
-        <button type="submit">Find Transitions</button>
+        <button type="submit">Find Transition</button>
       </form>
 
       {error && <p style={{ color: "red" }}>{error}</p>}
 
       {seedTrack && (
         <div>
-          <p><strong>Seed Track:</strong> {seedTrack.name}</p>
-          <p><strong>Year:</strong> {year}</p>
+          <h3>Seed Track</h3>
+          <p>{seedTrack.name}</p>
+          <p>Year: {year}</p>
         </div>
       )}
 
       {nextTrack && (
         <div>
-          <p><strong>Next Track ID:</strong> {nextTrack.next_track_id}</p>
-          <p><strong>Score:</strong> {nextTrack.score}</p>
-          <p><strong>Reason:</strong> {nextTrack.reason}</p>
+          <h3>Next Track</h3>
+          <p>{nextTrack.name}</p>
+          <p>{nextTrack.artists.join(", ")}</p>
+          <p>Year: {nextTrack.year}</p>
+          <p>Score: {nextTrack.score}</p>
+          <p>{nextTrack.reason}</p>
         </div>
       )}
     </div>

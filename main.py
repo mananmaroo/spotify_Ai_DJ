@@ -1,3 +1,35 @@
+import base64
+import random
+import requests
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel  # <-- This fixes the NameError
+
+# -----------------------------
+# APP SETUP
+# -----------------------------
+app = FastAPI(title="AI Year-Wise DJ")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# -----------------------------
+# SERVE FRONTEND FROM ROOT
+# -----------------------------
+app.mount("/static", StaticFiles(directory=".", html=True), name="frontend")
+
+# -----------------------------
+# SPOTIFY CREDENTIALS (hard-coded)
+# -----------------------------
+SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
+SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
+
 # -----------------------------
 # DATA MODELS
 # -----------------------------

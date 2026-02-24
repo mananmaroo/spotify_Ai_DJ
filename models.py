@@ -1,6 +1,6 @@
+# models.py
 from dataclasses import dataclass
 from typing import List
-
 
 @dataclass
 class TrackFingerprint:
@@ -15,7 +15,6 @@ class TrackFingerprint:
     popularity: int
     duration_ms: int
     has_audio_features: bool
-
 
 @dataclass
 class TransitionCandidate:

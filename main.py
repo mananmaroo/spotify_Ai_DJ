@@ -76,7 +76,7 @@ def search_track(name: str, artist: str) -> dict:
         raise HTTPException(status_code=404, detail="Track not found on Spotify")
     return items[0]
 
-def get_next_track(seed_track: dict, year_window: int = 2) -> dict:
+def get_next_track(seed_track: dict, year_window: int = 5) -> dict:
     token = get_spotify_token()
     headers = {"Authorization": f"Bearer {token}"}
     seed_year = int(seed_track["album"]["release_date"][:4])

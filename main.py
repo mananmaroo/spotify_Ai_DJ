@@ -1,9 +1,12 @@
-import os
 import base64
 import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+# =============================
+# APP SETUP
+# =============================
 
 app = FastAPI()
 
@@ -15,9 +18,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-SPOTIFY_CLIENT_ID = os.getenv("1924460439a14115b48fc7d3d03e2e2a")
-SPOTIFY_CLIENT_SECRET = os.getenv("95a349e198c248448ed7e8ad1029410e")
+# =============================
+# HARDCODED SPOTIFY CREDENTIALS
+# ⚠️ TESTING ONLY
+# =============================
 
+SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
+SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
 
 # =============================
 # MODELS
@@ -32,15 +39,11 @@ class NextTrackRequest(BaseModel):
     year: int
     window: int = 5
 
-
 # =============================
-# SPOTIFY AUTH (SAFE)
+# SPOTIFY AUTH
 # =============================
 
 def get_spotify_token():
-    if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
-        raise HTTPException(status_code=500, detail="Spotify credentials not set")
-
     auth_string = f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}"
     auth_base64 = base64.b64encode(auth_string.encode()).decode()
 
@@ -60,7 +63,6 @@ def get_spotify_token():
 
     return data["access_token"]
 
-
 # =============================
 # SEARCH TRACK
 # =============================
@@ -74,7 +76,11 @@ def search_track(req: SearchRequest):
     response = requests.get(
         "https://api.spotify.com/v1/search",
         headers={"Authorization": f"Bearer {token}"},
-        params={"q": query, "type": "track", "limit": 1},
+        params={
+            "q": query,
+            "type": "track",
+            "limit": 1
+        },
     )
 
     data = response.json()
@@ -98,9 +104,8 @@ def search_track(req: SearchRequest):
         "duration_ms": track["duration_ms"]
     }
 
-
 # =============================
-# NEXT TRACK
+# NEXT TRACK (AI DJ LOGIC)
 # =============================
 
 @app.post("/api/next-track")
@@ -154,3 +159,11 @@ def next_track(req: NextTrackRequest):
         "score": best["score"],
         "reason": "Closest year match for smooth transition"
     }
+
+# =============================
+# HEALTH CHECK
+# =============================
+
+@app.get("/")
+def root():
+    return {"status": "AI DJ backend running"}

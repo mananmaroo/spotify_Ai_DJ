@@ -1,66 +1,105 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export default function AIDJ() {
   const [trackName, setTrackName] = useState("");
   const [artistName, setArtistName] = useState("");
-  const [result, setResult] = useState(null);
+  const [seedTrack, setSeedTrack] = useState(null);
+  const [nextTrack, setNextTrack] = useState(null);
+  const [genres, setGenres] = useState([]);
+  const [year, setYear] = useState(null);
+  const [player, setPlayer] = useState(null);
   const [error, setError] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       setError("");
-      setResult(null);
-
-      // Search track via backend
+      // Search track
       const searchRes = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ track_name: trackName, artist_name: artistName }),
       });
-      if (!searchRes.ok) {
-        const errData = await searchRes.json();
-        throw new Error(errData.detail || "Track search failed");
-      }
-      const searchData = await searchRes.json();
-      const trackId = searchData.id;
+      if (!searchRes.ok) throw new Error("Track search failed");
+      const track = await searchRes.json();
+      setSeedTrack(track);
+
+      // Populate year
+      setYear(parseInt(track.album.release_date.slice(0, 4)));
+
+      // Populate genres
+      const artistIds = track.artists.map(a => a.id);
+      const genreResponses = await Promise.all(
+        artistIds.map(id => fetch(`/api/artist/${id}`).then(r => r.json()))
+      );
+      const trackGenres = [...new Set(genreResponses.flatMap(a => a.genres))];
+      setGenres(trackGenres);
 
       // Get next track
-      const backendRes = await fetch("/next-track", {
+      const nextRes = await fetch("/api/next-track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seed_track_id: trackId, year: 2020, window: 5 }),
+        body: JSON.stringify({ seed_track_id: track.id, year: year, window: 5 }),
       });
+      if (!nextRes.ok) throw new Error("Next track failed");
+      const nextData = await nextRes.json();
+      setNextTrack(nextData);
 
-      if (!backendRes.ok) {
-        const errData = await backendRes.json();
-        throw new Error(errData.detail || "Next track request failed");
+      // Play track in Web Playback SDK
+      if (player && track.id) {
+        await player.connect();
+        await player.togglePlay(); // starts playback if needed
+        await fetch(`https://api.spotify.com/v1/me/player/play`, {
+          method: "PUT",
+          body: JSON.stringify({ uris: [`spotify:track:${track.id}`] }),
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("sp_token")}`,
+          },
+        });
       }
-
-      const nextData = await backendRes.json();
-      setResult(nextData);
     } catch (err) {
       console.error(err);
       setError(err.message);
     }
   };
 
+  useEffect(() => {
+    // Spotify Web Playback SDK
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      const token = localStorage.getItem("sp_token"); // from your OAuth flow
+      const player = new window.Spotify.Player({
+        name: "AI DJ Player",
+        getOAuthToken: cb => cb(token),
+      });
+      setPlayer(player);
+    };
+  }, []);
+
   return (
     <div style={{ maxWidth: 500, margin: "auto", textAlign: "center" }}>
       <h1>🎵 AI DJ</h1>
       <form onSubmit={handleSubmit}>
-        <input placeholder="Track Name" value={trackName} onChange={(e) => setTrackName(e.target.value)} required />
-        <input placeholder="Artist Name" value={artistName} onChange={(e) => setArtistName(e.target.value)} required />
+        <input placeholder="Track Name" value={trackName} onChange={e => setTrackName(e.target.value)} required />
+        <input placeholder="Artist Name" value={artistName} onChange={e => setArtistName(e.target.value)} required />
         <button type="submit">Find Transitions</button>
       </form>
 
       {error && <p style={{ color: "red" }}>{error}</p>}
 
-      {result && (
+      {seedTrack && (
         <div>
-          <p><strong>Next Track ID:</strong> {result.next_track_id}</p>
-          <p><strong>Score:</strong> {result.score}</p>
-          <p><strong>Reason:</strong> {result.reason}</p>
+          <p><strong>Seed Track:</strong> {seedTrack.name}</p>
+          <p><strong>Year:</strong> {year}</p>
+          <p><strong>Genres:</strong> {genres.join(", ")}</p>
+        </div>
+      )}
+
+      {nextTrack && (
+        <div>
+          <p><strong>Next Track ID:</strong> {nextTrack.next_track_id}</p>
+          <p><strong>Score:</strong> {nextTrack.score}</p>
+          <p><strong>Reason:</strong> {nextTrack.reason}</p>
         </div>
       )}
     </div>

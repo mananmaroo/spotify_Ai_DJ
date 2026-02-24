@@ -12,7 +12,8 @@ SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
 SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
 
 
-# App setup
+# -----------------------------
+# FastAPI app
 # -----------------------------
 app = FastAPI(title="AI Year-Wise DJ")
 app.add_middleware(
@@ -39,7 +40,7 @@ class TrackResponse(BaseModel):
     uri: str
 
 # -----------------------------
-# Helper functions
+# Spotify helper functions
 # -----------------------------
 def get_spotify_token() -> str:
     auth_header = base64.b64encode(f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()).decode()
@@ -54,7 +55,9 @@ def safe_str(val, default="Unknown"):
     return str(val) if val else default
 
 def safe_artists(track):
-    return [a.get("name", "Unknown") for a in track.get("artists", [])] if track.get("artists") else ["Unknown"]
+    if not track or not track.get("artists"):
+        return ["Unknown"]
+    return [a.get("name", "Unknown") for a in track.get("artists", [])]
 
 def search_track(name: str, artist: str) -> dict:
     token = get_spotify_token()
@@ -124,3 +127,33 @@ def get_next_track(seed_track: dict, year_window: int = 2) -> dict:
         return random.choice(group)
 
     return seed_track
+
+# -----------------------------
+# API routes
+# -----------------------------
+@app.get("/api/health")
+def health_check():
+    return {"status": "AI DJ backend running"}
+
+@app.post("/api/search", response_model=TrackResponse)
+def api_search(req: TrackRequest):
+    seed = search_track(req.track_name, req.artist_name)
+    return TrackResponse(
+        name=safe_str(seed.get("name")),
+        artists=safe_artists(seed),
+        release_date=safe_str(seed.get("album", {}).get("release_date")),
+        id=safe_str(seed.get("id")),
+        uri=safe_str(seed.get("uri"))
+    )
+
+@app.post("/api/next-track", response_model=TrackResponse)
+def api_next(req: TrackRequest):
+    seed = search_track(req.track_name, req.artist_name)
+    next_track = get_next_track(seed, year_window=2)
+    return TrackResponse(
+        name=safe_str(next_track.get("name")),
+        artists=safe_artists(next_track),
+        release_date=safe_str(next_track.get("album", {}).get("release_date")),
+        id=safe_str(next_track.get("id")),
+        uri=safe_str(next_track.get("uri"))
+    )

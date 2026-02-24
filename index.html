@@ -26,9 +26,7 @@
       font-weight: bold;
       border: none;
     }
-    button:hover {
-      opacity: 0.85;
-    }
+    button:hover { opacity: 0.85; }
     .card {
       background: #fff3e6;
       padding: 20px;
@@ -36,9 +34,7 @@
       border-radius: 12px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.1);
     }
-    h1 {
-      color: #a37c5b;
-    }
+    h1 { color: #a37c5b; }
   </style>
 </head>
 <body>
@@ -58,50 +54,48 @@
   <script>
     let spotifyPlayer;
     let deviceId = null;
-    let userAccessToken = null; // OAuth required to play tracks
+    let userAccessToken = null; // OAuth required for playback
 
     async function searchTrack() {
       const trackName = document.getElementById("trackName").value;
       const artistName = document.getElementById("artistName").value;
       document.getElementById("error").innerText = "";
+
       try {
+        // Seed track
         const res = await fetch("/api/search", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {"Content-Type":"application/json"},
           body: JSON.stringify({ track_name: trackName, artist_name: artistName })
         });
         const track = await res.json();
-        if (!track) throw new Error("Track not found");
         const releaseYear = track.release_date ? track.release_date.slice(0,4) : "Unknown";
-
         document.getElementById("seedTrack").style.display = "block";
         document.getElementById("seedTrack").innerHTML = `
           <h3>Seed Track</h3>
           <p>${track.name}</p>
-          <p>Artist: ${track.artists ? track.artists.join(", ") : "Unknown"}</p>
+          <p>Artist: ${track.artists.join(", ")}</p>
           <p>Year: ${releaseYear}</p>
         `;
 
-        // Next Track
+        // Next track
         const nextRes = await fetch("/api/next-track", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {"Content-Type":"application/json"},
           body: JSON.stringify({ track_name: trackName, artist_name: artistName })
         });
         const nextTrack = await nextRes.json();
-        if (!nextTrack) throw new Error("Next track not found");
-
         const nextYear = nextTrack.release_date ? nextTrack.release_date.slice(0,4) : "Unknown";
-
         document.getElementById("nextTrack").style.display = "block";
         document.getElementById("nextTrack").innerHTML = `
           <h3>Next Track</h3>
           <p>${nextTrack.name}</p>
-          <p>Artist: ${nextTrack.artists ? nextTrack.artists.join(", ") : "Unknown"}</p>
+          <p>Artist: ${nextTrack.artists.join(", ")}</p>
           <p>Year: ${nextYear}</p>
           <button onclick="playTrack('${nextTrack.id}')">▶ Play Next Track</button>
         `;
-      } catch (err) {
+
+      } catch(err) {
         console.error(err);
         document.getElementById("error").innerText = err.message;
       }
@@ -113,25 +107,22 @@
         getOAuthToken: cb => { cb(userAccessToken); },
         volume: 0.5
       });
-      spotifyPlayer.addListener('ready', ({ device_id }) => {
-        deviceId = device_id;
-        console.log('Device Ready:', device_id);
-      });
+      spotifyPlayer.addListener('ready', ({ device_id }) => { deviceId = device_id; console.log('Device Ready:', device_id); });
       spotifyPlayer.connect();
     };
 
-    async function playTrack(trackId) {
-      if (!userAccessToken) {
+    async function playTrack(trackId){
+      if(!userAccessToken){
         alert("Spotify OAuth required to play tracks.");
         return;
       }
       await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${deviceId}`, {
-        method: "PUT",
-        headers: {
-          "Authorization": `Bearer ${userAccessToken}`,
-          "Content-Type": "application/json"
+        method:"PUT",
+        headers:{
+          "Authorization":`Bearer ${userAccessToken}`,
+          "Content-Type":"application/json"
         },
-        body: JSON.stringify({ uris: [`spotify:track:${trackId}`] })
+        body: JSON.stringify({ uris:[`spotify:track:${trackId}`] })
       });
     }
   </script>

@@ -8,18 +8,14 @@ export default function AIDJ() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     try {
       setError("");
       setResult(null);
 
-      const token = localStorage.getItem("spotify_token");
-      if (!token) throw new Error("Spotify token missing.");
-
       // Search track via backend
       const searchRes = await fetch("/api/search", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ track_name: trackName, artist_name: artistName }),
       });
       if (!searchRes.ok) {
@@ -32,7 +28,7 @@ export default function AIDJ() {
       // Get next track
       const backendRes = await fetch("/next-track", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ seed_track_id: trackId, year: 2020, window: 5 }),
       });
 

@@ -1,28 +1,25 @@
-from __future__ import annotations
-
 from dataclasses import dataclass
+from typing import List
 
 
-@dataclass(slots=True)
+@dataclass
 class TrackFingerprint:
     track_id: str
     track_name: str
-    artist_names: list[str]
-    artist_ids: list[str]
+    artist_names: List[str]
+    artist_ids: List[str]
     release_year: int
-    section_energies: list[float]
-    section_tempos: list[float]
-    section_loudness: list[float]
-    popularity: int = 0
-    duration_ms: int = 0
-    has_audio_features: bool = True
+    section_energies: List[float]
+    section_tempos: List[float]
+    section_loudness: List[float]
+    popularity: int
+    duration_ms: int
+    has_audio_features: bool
 
 
-@dataclass(slots=True)
+@dataclass
 class TransitionCandidate:
     from_track_id: str
     to_track_id: str
     score: float
     reason: str
-    from_section_index: int = 0
-    to_section_index: int = 0

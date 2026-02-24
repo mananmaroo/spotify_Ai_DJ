@@ -11,7 +11,7 @@ from typing import List
 # APP SETUP
 # =============================
 
-app = FastAPI()
+app = FastAPI(title="AI Year-Wise DJ")
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,87 +29,59 @@ app.add_middleware(
 SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
 SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
 
-# ---------------------------
-# FastAPI app setup
-# ---------------------------
-app = FastAPI(title="AI Year-Wise DJ")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Serve frontend directly from root
+app.mount("/", StaticFiles(directory=".", html=True), name="frontend")
 
-# Serve frontend (index.html + JS/CSS)
-app.mount("/", StaticFiles(directory="frontend_dist", html=True), name="frontend")
 
-# ---------------------------
-# Data models
-# ---------------------------
+# -----------------------------
+# DATA MODELS
+# -----------------------------
 class TrackRequest(BaseModel):
-    name: str
-    artist: str
-    year: int = None  # Optional
-
+    track_name: str
+    artist_name: str
 
 class TrackResponse(BaseModel):
     name: str
-    artist: str
+    artists: list[str]
     release_date: str
     id: str
     uri: str
 
-# ---------------------------
-# Helper functions
-# ---------------------------
+# -----------------------------
+# HELPER FUNCTIONS
+# -----------------------------
 def get_spotify_token() -> str:
-    """
-    Get Spotify access token using Client Credentials flow.
-    """
     auth_header = base64.b64encode(f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()).decode()
     headers = {"Authorization": f"Basic {auth_header}"}
     data = {"grant_type": "client_credentials"}
     response = requests.post("https://accounts.spotify.com/api/token", headers=headers, data=data)
-
     if response.status_code != 200:
         raise HTTPException(status_code=500, detail=f"Spotify token error: {response.text}")
     return response.json()["access_token"]
 
-
 def search_track(name: str, artist: str) -> dict:
-    """
-    Search Spotify for a track by name + artist.
-    """
     token = get_spotify_token()
     headers = {"Authorization": f"Bearer {token}"}
     query = f"track:{name} artist:{artist}"
     response = requests.get(
         "https://api.spotify.com/v1/search",
         headers=headers,
-        params={"q": query, "type": "track", "limit": 1}
+        params={"q": query, "type": "track", "limit": 5}
     )
     if response.status_code != 200:
         raise HTTPException(status_code=500, detail=f"Spotify search error: {response.text}")
-
     items = response.json().get("tracks", {}).get("items", [])
     if not items:
         raise HTTPException(status_code=404, detail="Track not found on Spotify")
     return items[0]
 
-
 def get_next_track(seed_track: dict, year_window: int = 2) -> dict:
-    """
-    Get next track based on year proximity only.
-    """
     token = get_spotify_token()
     headers = {"Authorization": f"Bearer {token}"}
-
-    # Get seed track release year
     seed_year = int(seed_track["album"]["release_date"][:4])
+    candidates = []
 
-    # Simple search by year window
     for delta in range(year_window + 1):
         years_to_try = [seed_year - delta, seed_year + delta]
         for y in years_to_try:
@@ -117,39 +89,42 @@ def get_next_track(seed_track: dict, year_window: int = 2) -> dict:
             response = requests.get(
                 "https://api.spotify.com/v1/search",
                 headers=headers,
-                params={"q": query, "type": "track", "limit": 5}
+                params={"q": query, "type": "track", "limit": 10}
             )
             items = response.json().get("tracks", {}).get("items", [])
             for t in items:
                 if t["id"] != seed_track["id"]:
-                    return t
-    return seed_track  # fallback to same track if nothing found
+                    candidates.append(t)
 
-# ---------------------------
-# API routes
-# ---------------------------
+    if not candidates:
+        return seed_track
+    return random.choice(candidates)
+
+# -----------------------------
+# API ROUTES
+# -----------------------------
 @app.get("/api/health")
 def health_check():
     return {"status": "AI DJ backend running"}
 
 @app.post("/api/search", response_model=TrackResponse)
-def api_search(track_req: TrackRequest):
-    seed_track = search_track(track_req.name, track_req.artist)
+def api_search(req: TrackRequest):
+    seed = search_track(req.track_name, req.artist_name)
     return TrackResponse(
-        name=seed_track["name"],
-        artist=", ".join(a["name"] for a in seed_track.get("artists", [])),
-        release_date=seed_track["album"]["release_date"],
-        id=seed_track["id"],
-        uri=seed_track["uri"]
+        name=seed["name"],
+        artists=[a["name"] for a in seed.get("artists", [])],
+        release_date=seed["album"]["release_date"],
+        id=seed["id"],
+        uri=seed["uri"]
     )
 
-@app.post("/api/next", response_model=TrackResponse)
-def api_next(track_req: TrackRequest):
-    seed_track = search_track(track_req.name, track_req.artist)
-    next_track = get_next_track(seed_track, year_window=2)
+@app.post("/api/next-track", response_model=TrackResponse)
+def api_next(req: TrackRequest):
+    seed = search_track(req.track_name, req.artist_name)
+    next_track = get_next_track(seed, year_window=5)
     return TrackResponse(
         name=next_track["name"],
-        artist=", ".join(a["name"] for a in next_track.get("artists", [])),
+        artists=[a["name"] for a in next_track.get("artists", [])],
         release_date=next_track["album"]["release_date"],
         id=next_track["id"],
         uri=next_track["uri"]

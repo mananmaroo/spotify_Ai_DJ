@@ -14,22 +14,22 @@ export default function AIDJ() {
       setResult(null);
 
       const token = localStorage.getItem("spotify_token");
-      if (!token) {
-        setError("Spotify token missing.");
-        return;
+      if (!token) throw new Error("Spotify token missing.");
+
+      // Search track via backend
+      const searchRes = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ track_name: trackName, artist_name: artistName }),
+      });
+      if (!searchRes.ok) {
+        const errData = await searchRes.json();
+        throw new Error(errData.detail || "Track search failed");
       }
-
-      // Search track
-      const searchRes = await fetch(
-        `https://api.spotify.com/v1/search?q=track:${encodeURIComponent(trackName)} artist:${encodeURIComponent(artistName)}&type=track&limit=1`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
       const searchData = await searchRes.json();
-      if (!searchData.tracks.items.length) throw new Error("Track not found");
+      const trackId = searchData.id;
 
-      const trackId = searchData.tracks.items[0].id;
-
-      // Call backend
+      // Get next track
       const backendRes = await fetch("/next-track", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -38,11 +38,11 @@ export default function AIDJ() {
 
       if (!backendRes.ok) {
         const errData = await backendRes.json();
-        throw new Error(errData.detail || "Backend error");
+        throw new Error(errData.detail || "Next track request failed");
       }
 
-      const data = await backendRes.json();
-      setResult(data);
+      const nextData = await backendRes.json();
+      setResult(nextData);
     } catch (err) {
       console.error(err);
       setError(err.message);
@@ -57,7 +57,9 @@ export default function AIDJ() {
         <input placeholder="Artist Name" value={artistName} onChange={(e) => setArtistName(e.target.value)} required />
         <button type="submit">Find Transitions</button>
       </form>
+
       {error && <p style={{ color: "red" }}>{error}</p>}
+
       {result && (
         <div>
           <p><strong>Next Track ID:</strong> {result.next_track_id}</p>

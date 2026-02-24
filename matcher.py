@@ -1,4 +1,3 @@
-# matcher.py
 from models import TrackFingerprint, TransitionCandidate
 
 def best_transition(current: TrackFingerprint, candidates: list[TrackFingerprint], target_year: int = 0, window: int = 2):
@@ -8,7 +7,6 @@ def best_transition(current: TrackFingerprint, candidates: list[TrackFingerprint
     for c in candidates:
         if c.track_id == current.track_id:
             continue
-        # Simple metadata score fallback
         score = 1.0
         reason = f"Year diff: {abs(c.release_year - target_year)}"
         match = TransitionCandidate(from_track_id=current.track_id, to_track_id=c.track_id, score=score, reason=reason)

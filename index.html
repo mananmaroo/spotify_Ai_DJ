@@ -271,6 +271,22 @@ footer{margin-top:32px;text-align:center;font-size:10px;color:#1a1a1a}
 .sw input:checked+.sw-track::after{transform:translateX(18px)}
 
 @media(max-width:480px){.pref-row{grid-template-columns:1fr}}
+
+/* CHANGE SEED PANEL */
+.seed-edit{width:100%;max-width:700px;margin-bottom:11px;display:none;
+  background:var(--surf);border:1px solid rgba(255,193,7,.3);border-radius:var(--rad);padding:14px 16px;
+  animation:fu .3s ease both}
+.seed-edit.on{display:block}
+.seed-edit-lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--w);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.seed-edit-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;align-items:end}
+.seed-edit-row .ig{display:flex;flex-direction:column;gap:3px}
+.seed-apply{padding:9px 16px;background:var(--w);color:#000;border:none;border-radius:var(--rad);
+  font-family:var(--D);font-size:16px;letter-spacing:.06em;cursor:pointer;white-space:nowrap;transition:opacity .15s}
+.seed-apply:hover{opacity:.85}
+.seed-cancel{padding:9px 12px;background:none;border:1px solid var(--b);color:var(--mu);
+  border-radius:var(--rad);font-size:12px;cursor:pointer;transition:all .15s}
+.seed-cancel:hover{border-color:var(--r);color:var(--r)}
+@media(max-width:540px){.seed-edit-row{grid-template-columns:1fr 1fr;}.seed-edit-row .seed-apply,.seed-edit-row .seed-cancel{grid-column:span 2}}
 </style>
 </head>
 <body>
@@ -414,11 +430,24 @@ footer{margin-top:32px;text-align:center;font-size:10px;color:#1a1a1a}
       <div class="xf-line" id="xfln" style="left:100%"></div>
     </div>
   </div>
+  <!-- CHANGE SEED PANEL (shown when user clicks "Change Song") -->
+  <div class="seed-edit" id="seed-edit">
+    <div class="seed-edit-lbl">✏️ Change seed song — mix will restart from this track</div>
+    <div class="seed-edit-row">
+      <div class="ig"><label for="seed-si">Song Title</label><input id="seed-si" type="text" placeholder="New song…" autocomplete="off"/></div>
+      <div class="ig"><label for="seed-ai">Artist</label><input id="seed-ai" type="text" placeholder="Artist…" autocomplete="off"/></div>
+      <div style="display:flex;gap:6px;align-items:flex-end">
+        <button class="seed-apply" onclick="applySeedChange()">APPLY</button>
+        <button class="seed-cancel" onclick="cancelSeedChange()">✕</button>
+      </div>
+    </div>
+  </div>
   <!-- CONTROLS -->
   <div class="ctls">
-    <button class="cb2 go"  id="ppbtn"  onclick="djPP()">▶ PLAY</button>
-    <button class="cb2"     id="skbtn"  onclick="djSkip()" disabled>⏭ SKIP</button>
-    <button class="cb2 stp" id="stbtn"  onclick="djStop()" disabled>■ STOP</button>
+    <button class="cb2 go"   id="ppbtn"   onclick="djPP()">▶ PLAY</button>
+    <button class="cb2"      id="skbtn"   onclick="djSkip()" disabled>⏭ SKIP</button>
+    <button class="cb2"      id="chbtn"   onclick="openSeedEdit()" disabled style="border-color:rgba(255,193,7,.3);color:var(--w)">✏️ CHANGE SONG</button>
+    <button class="cb2 stp"  id="stbtn"   onclick="djStop()" disabled>■ STOP</button>
     <div class="mp-disp" id="mpd">Mix @ ½</div>
   </div>
 </div>
@@ -887,7 +916,7 @@ async function djStart(){
     else if(nowA)nowA.play().catch(()=>{});
 
     $('ppbtn').innerHTML='⏸ PAUSE';$('npbb').innerHTML='⏸';
-    $('skbtn').disabled=false;$('stbtn').disabled=false;
+    $('skbtn').disabled=false;$('stbtn').disabled=false;$('chbtn').disabled=false;
 
     if(tickTimer)clearInterval(tickTimer);
     tickTimer=setInterval(tick,TICK);
@@ -929,7 +958,8 @@ function djStop(){
   hideXF();
   $('npb').classList.remove('on');
   $('ppbtn').innerHTML='▶ PLAY';$('npbb').innerHTML='▶';
-  $('skbtn').disabled=true;$('stbtn').disabled=true;
+  $('skbtn').disabled=true;$('stbtn').disabled=true;$('chbtn').disabled=true;
+  $('seed-edit').classList.remove('on');
   hist=[];nowT=null;nxtT=null;
 }
 
@@ -963,6 +993,53 @@ function clearErr(){$('er').classList.remove('on');}
 // ══════════════════════════════════════════════════
 //  BOOT
 // ══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
+//  CHANGE SEED
+// ══════════════════════════════════════════════════
+function openSeedEdit(){
+  $('seed-si').value=curSong;
+  $('seed-ai').value=curArt;
+  $('seed-edit').classList.add('on');
+  setTimeout(()=>$('seed-si').focus(),50);
+}
+function cancelSeedChange(){
+  $('seed-edit').classList.remove('on');
+}
+async function applySeedChange(){
+  const ns=$('seed-si').value.trim(), na=$('seed-ai').value.trim();
+  if(!ns||!na)return;
+  $('seed-edit').classList.remove('on');
+  // Update top inputs too so user sees the change
+  $('si').value=ns; $('ai').value=na;
+  // Stop current xfade if running, then restart from new seed
+  if(xfTimer){clearInterval(xfTimer);xfTimer=null;}
+  inXF=false;mixFired=false;
+  if(nowA){nowA.pause();nowA.ontimeupdate=null;nowA.onended=null;nowA=null;}
+  if(nxtA){nxtA.pause();nxtA=null;}
+  if(isSDK())sdkPause();
+  hideXF();
+  // Fetch new seed and restart
+  const btn=$('ppbtn'); btn.innerHTML='⏳ LOADING…'; btn.disabled=true;
+  try{
+    const d=await getRec(ns,na);
+    nowT={...d.seed,match_reason:''};
+    nxtT={...d.recommendation};
+    curSong=nowT.name; curArt=nowT.artist.split(',')[0].trim();
+    hist.push(nowT); if(hist.length>20)hist.shift();
+    mixFired=false; inXF=false; running=true; paused=false;
+    if(!isSDK()){
+      if(nowT.preview_url){nowA=new Audio(nowT.preview_url);nowA.volume=vol;}
+      if(nxtT.preview_url){nxtA=new Audio(nxtT.preview_url);nxtA.preload='auto';nxtA.volume=0;}
+    }
+    fillCard('now',nowT); fillCard('nxt',nxtT);
+    updateQueue(); updateNPB(nowT,true);
+    if(isSDK()){await sdkVol(vol);await sdkPlay(nowT.uri);}
+    else if(nowA)nowA.play().catch(()=>{});
+    btn.innerHTML='⏸ PAUSE'; $('npbb').innerHTML='⏸';
+  }catch(e){showErr(e.message);btn.innerHTML='▶ PLAY';}
+  finally{btn.disabled=false;}
+}
+
 (function(){
   parseFrag();
   if(!AT)loadTokens();
@@ -978,6 +1055,8 @@ function clearErr(){$('er').classList.remove('on');}
 $('gobtn').addEventListener('click',djStart);
 $('si').addEventListener('keydown',e=>e.key==='Enter'&&$('ai').focus());
 $('ai').addEventListener('keydown',e=>e.key==='Enter'&&djStart());
+$('seed-si').addEventListener('keydown',e=>e.key==='Enter'&&$('seed-ai').focus());
+$('seed-ai').addEventListener('keydown',e=>e.key==='Enter'&&applySeedChange());
 </script>
 </body>
 </html>

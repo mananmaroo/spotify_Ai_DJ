@@ -328,7 +328,7 @@ footer{margin-top:50px;text-align:center;font-size:12px;color:#2a2a2a}
     </div>
   </div>
 
-  <button class="next-btn" id="next-btn" style="display:none" onclick="findAnother()">↻ FIND ANOTHER TRACK</button>
+  <button class="next-btn" id="next-btn" style="display:none" onclick="findAnother()">↻ FIND NEXT TRACK</button>
 
   <footer>Powered by Spotify &bull; DJ.AI</footer>
 </div>
@@ -629,8 +629,8 @@ function buildPlayer(containerId, track) {
 
   const sdkAvailable = sdkReady && accessToken;
 
+  // ── Section 1: Full track button (Premium SDK) ──────────────
   if (sdkAvailable) {
-    // SDK player button
     const statusDiv = document.createElement('div');
     statusDiv.className = 'sdk-status';
     statusDiv.textContent = '● Full track via Spotify Premium';
@@ -650,30 +650,35 @@ function buildPlayer(containerId, track) {
       const ok = await playWithSDK(track.uri);
       btn.classList.remove('buffering');
       btn.innerHTML = ok ? '⏸' : '▶';
-      if (!ok) {
-        // Fallback to preview
-        buildPreviewPlayer(containerId, track);
-      }
     };
-
-    row.appendChild(btn);
 
     const info = document.createElement('div');
     info.style.cssText = 'font-size:12px;color:var(--muted)';
     info.textContent = fmtMs(track.duration_ms);
+
+    row.appendChild(btn);
     row.appendChild(info);
     c.appendChild(row);
+  }
 
-  } else if (track.preview_url) {
+  // ── Section 2: 30s preview player (always shown if available) ──
+  if (track.preview_url) {
+    // Label so user knows what it is
+    const previewLabel = document.createElement('div');
+    previewLabel.style.cssText = 'font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:' + (sdkAvailable ? '10px' : '0') + ';margin-bottom:4px';
+    previewLabel.textContent = sdkAvailable ? '30s Preview' : '30s Preview';
+    c.appendChild(previewLabel);
+
     buildPreviewPlayer(containerId, track);
-  } else {
+  } else if (!sdkAvailable) {
+    // No preview and no SDK — show message
     const note = document.createElement('div');
     note.className = 'no-preview';
-    note.textContent = 'No preview · connect Spotify Premium for full playback';
+    note.textContent = 'No preview available · connect Spotify Premium for full playback';
     c.appendChild(note);
   }
 
-  // Spotify link always
+  // ── Section 3: Open in Spotify link ─────────────────────────
   if (track.spotify_url) {
     const a = document.createElement('a');
     a.href = track.spotify_url;
@@ -699,6 +704,7 @@ function buildPreviewPlayer(containerId, track) {
   const btn = document.createElement('button');
   btn.className = 'play-btn';
   btn.innerHTML = '▶';
+  btn.title = 'Play 30s preview';
 
   const prog = document.createElement('div');
   prog.className = 'prog-area';
@@ -714,32 +720,38 @@ function buildPreviewPlayer(containerId, track) {
   times.appendChild(tc); times.appendChild(td);
   prog.appendChild(bg); prog.appendChild(times);
   row.appendChild(btn); row.appendChild(prog);
-
-  // Insert before any sp-link
-  const spLink = c.querySelector('.sp-link');
-  if (spLink) c.insertBefore(row, spLink);
-  else c.appendChild(row);
+  c.appendChild(row);
 
   btn.onclick = () => {
+    // Pause all other previews
     Object.entries(previewAudios).forEach(([id, a]) => {
       if (id !== containerId && !a.paused) {
-        a.pause(); a.currentTime=0;
-        const ob = $(`${id}`)?.querySelector?.('.play-btn');
-        if (ob) ob.innerHTML = '▶';
+        a.pause(); a.currentTime = 0;
+        // reset that card's play button
+        const otherCard = document.getElementById(id);
+        if (otherCard) {
+          const ob = otherCard.querySelector('.play-btn');
+          if (ob) ob.innerHTML = '▶';
+        }
       }
     });
-    if (audio.paused) { audio.play().catch(()=>{}); btn.innerHTML='⏸'; }
-    else { audio.pause(); btn.innerHTML='▶'; }
+    if (audio.paused) { audio.play().catch(()=>{}); btn.innerHTML = '⏸'; }
+    else              { audio.pause();               btn.innerHTML = '▶'; }
   };
+
   audio.ontimeupdate = () => {
-    const pct = (audio.currentTime/(audio.duration||30))*100;
-    fill.style.width = pct+'%';
-    tc.textContent = fmtMs(audio.currentTime*1000);
+    const pct = (audio.currentTime / (audio.duration || 30)) * 100;
+    fill.style.width = pct + '%';
+    tc.textContent = fmtMs(audio.currentTime * 1000);
   };
-  audio.onended = () => { btn.innerHTML='▶'; fill.style.width='0%'; tc.textContent='0:00'; };
+  audio.onended = () => {
+    btn.innerHTML = '▶';
+    fill.style.width = '0%';
+    tc.textContent = '0:00';
+  };
   bg.onclick = e => {
-    const pct = (e.clientX-bg.getBoundingClientRect().left)/bg.offsetWidth;
-    audio.currentTime = pct*(audio.duration||30);
+    const pct = (e.clientX - bg.getBoundingClientRect().left) / bg.offsetWidth;
+    audio.currentTime = pct * (audio.duration || 30);
   };
 }
 
@@ -788,6 +800,18 @@ function renderResult(data) {
 
   $('result-area').classList.add('visible');
   $('next-btn').style.display = 'block';
+
+  // ── Promote recommendation → new seed for the next round ──
+  // The recommended track becomes the new "current song" so that
+  // clicking "Find Next" chains forward from the recommendation.
+  // Pull the primary artist name (first artist before any comma).
+  const primaryArtist = rec.artist.split(',')[0].trim();
+  currentSong   = rec.name;
+  currentArtist = primaryArtist;
+
+  // Update input fields so the user sees what's now the seed
+  $('song-in').value   = currentSong;
+  $('artist-in').value = currentArtist;
 }
 
 async function doSearch() {
@@ -804,6 +828,7 @@ async function doSearch() {
   errEl.classList.remove('visible');
   stopAllPreviews();
   btn.disabled=true; btn.classList.add('loading'); btn.textContent='SEARCHING…';
+  // currentSong/currentArtist will be updated inside renderResult
   currentSong=song; currentArtist=artist;
 
   try {
@@ -823,13 +848,14 @@ async function findAnother() {
   const btn = $('next-btn');
   btn.textContent='↻ SEARCHING…'; btn.disabled=true;
   try {
+    // currentSong/currentArtist already point to the last recommendation
     const data = await fetchRec(currentSong, currentArtist);
     renderResult(data);
   } catch(e) {
     $('error-msg').textContent=e.message;
     $('error-msg').classList.add('visible');
   } finally {
-    btn.textContent='↻ FIND ANOTHER TRACK'; btn.disabled=false;
+    btn.textContent='↻ FIND NEXT TRACK'; btn.disabled=false;
   }
 }
 

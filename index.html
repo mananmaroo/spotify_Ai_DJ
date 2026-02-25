@@ -8,250 +8,200 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet"/>
 <script src="https://sdk.scdn.co/spotify-player.js"></script>
 <style>
-/* ── RESET ─────────────────────────────────────────── */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-
 :root{
-  --bg:#080808;
-  --surface:#111;
-  --surface2:#181818;
-  --border:rgba(255,255,255,0.07);
-  --accent:#1DB954;
-  --accent-dim:rgba(29,185,84,0.15);
-  --danger:#ff4d4d;
-  --text:#e8e8e8;
-  --muted:#555;
-  --r:14px;
-  --disp:'Bebas Neue',sans-serif;
-  --body:'DM Sans',sans-serif;
+  --bg:#080808;--surface:#111;--border:rgba(255,255,255,0.07);
+  --accent:#1DB954;--accent-dim:rgba(29,185,84,0.12);
+  --danger:#ff4d4d;--warn:#ffc107;
+  --text:#e8e8e8;--muted:#555;--r:14px;
+  --disp:'Bebas Neue',sans-serif;--body:'DM Sans',sans-serif;
 }
-
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--body);font-size:15px;line-height:1.6;overflow-x:hidden}
-
-/* grain */
 body::before{content:'';position:fixed;inset:0;z-index:0;
   background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
   pointer-events:none}
 
-/* ── LAYOUT ─────────────────────────────────────────── */
-.app{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:0 16px 80px}
+.app{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:0 16px 100px}
 
-/* ── HEADER ─────────────────────────────────────────── */
+/* HEADER */
 header{width:100%;max-width:700px;padding:44px 0 28px;text-align:center}
-
-.logo{
-  font-family:var(--disp);
-  font-size:clamp(70px,13vw,120px);
-  letter-spacing:.04em;
-  line-height:.88;
+.logo{font-family:var(--disp);font-size:clamp(70px,13vw,120px);letter-spacing:.04em;line-height:.88;
   background:linear-gradient(135deg,#fff 0%,var(--accent) 55%,#a8ffca 100%);
   -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
-  display:inline-block;position:relative
-}
-.logo::after{
-  content:'DJ.AI';position:absolute;inset:0;
+  display:inline-block;position:relative}
+.logo::after{content:'DJ.AI';position:absolute;inset:0;
   background:linear-gradient(135deg,transparent 20%,rgba(29,185,84,.25) 100%);
   -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
-  filter:blur(22px);z-index:-1
-}
+  filter:blur(22px);z-index:-1}
 .tagline{color:var(--muted);font-size:12px;letter-spacing:.2em;text-transform:uppercase;margin-top:10px}
-
-/* EQ bars */
 .eq{display:flex;gap:3px;justify-content:center;align-items:flex-end;height:18px;margin:14px 0}
 .eq span{width:3px;background:var(--accent);border-radius:2px;animation:eqb 1.2s ease-in-out infinite alternate;opacity:.65}
-.eq span:nth-child(1){height:35%;animation-delay:0s}
-.eq span:nth-child(2){height:70%;animation-delay:.1s}
-.eq span:nth-child(3){height:100%;animation-delay:.18s}
-.eq span:nth-child(4){height:55%;animation-delay:.08s}
-.eq span:nth-child(5){height:80%;animation-delay:.22s}
-.eq span:nth-child(6){height:40%;animation-delay:.05s}
+.eq span:nth-child(1){height:35%;animation-delay:0s}.eq span:nth-child(2){height:70%;animation-delay:.1s}
+.eq span:nth-child(3){height:100%;animation-delay:.18s}.eq span:nth-child(4){height:55%;animation-delay:.08s}
+.eq span:nth-child(5){height:80%;animation-delay:.22s}.eq span:nth-child(6){height:40%;animation-delay:.05s}
 .eq span:nth-child(7){height:65%;animation-delay:.14s}
 @keyframes eqb{from{transform:scaleY(.25)}to{transform:scaleY(1)}}
 
-/* ── AUTH BAR ────────────────────────────────────────── */
-.auth-bar{
-  width:100%;max-width:700px;
-  display:flex;align-items:center;justify-content:space-between;
+/* AUTH BAR */
+.auth-bar{width:100%;max-width:700px;display:flex;align-items:center;justify-content:space-between;
   background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
-  padding:12px 20px;margin-bottom:20px;gap:12px;flex-wrap:wrap
-}
+  padding:12px 20px;margin-bottom:14px;gap:12px;flex-wrap:wrap}
 .auth-status{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
 .auth-dot{width:8px;height:8px;border-radius:50%;background:#444;flex-shrink:0;transition:background .3s}
 .auth-dot.connected{background:var(--accent);box-shadow:0 0 8px rgba(29,185,84,.5)}
-.auth-dot.error{background:var(--danger)}
-
-.login-btn{
-  display:inline-flex;align-items:center;gap:8px;
-  padding:9px 20px;
-  background:var(--accent);color:#000;
-  border:none;border-radius:var(--r);
-  font-family:var(--disp);font-size:17px;letter-spacing:.06em;
-  cursor:pointer;transition:transform .15s,box-shadow .15s;flex-shrink:0
-}
+.login-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 20px;
+  background:var(--accent);color:#000;border:none;border-radius:var(--r);
+  font-family:var(--disp);font-size:17px;letter-spacing:.06em;cursor:pointer;
+  transition:transform .15s,box-shadow .15s;flex-shrink:0}
 .login-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(29,185,84,.35)}
-.login-btn svg{flex-shrink:0}
-
-.logout-btn{
-  background:none;border:1px solid var(--border);color:var(--muted);
-  padding:7px 14px;border-radius:var(--r);font-family:var(--body);font-size:12px;
-  cursor:pointer;transition:border-color .2s,color .2s
-}
+.logout-btn{background:none;border:1px solid var(--border);color:var(--muted);
+  padding:7px 14px;border-radius:var(--r);font-size:12px;cursor:pointer;
+  transition:border-color .2s,color .2s}
 .logout-btn:hover{border-color:var(--danger);color:var(--danger)}
-
-.premium-warn{
-  width:100%;max-width:700px;margin-bottom:16px;
+.premium-warn{width:100%;max-width:700px;margin-bottom:12px;
   background:rgba(255,193,7,.07);border:1px solid rgba(255,193,7,.25);
-  border-radius:var(--r);padding:11px 16px;font-size:13px;color:#ffc107;display:none
-}
+  border-radius:var(--r);padding:11px 16px;font-size:13px;color:var(--warn);display:none}
 .premium-warn.visible{display:block}
 
-/* ── SEARCH CARD ────────────────────────────────────── */
-.search-card{
-  width:100%;max-width:700px;
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:20px;padding:28px 28px 24px
-}
+/* BLACKLIST PANEL */
+.blacklist-panel{width:100%;max-width:700px;margin-bottom:14px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.blacklist-header{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 18px;cursor:pointer;user-select:none;gap:8px}
+.blacklist-header:hover{background:rgba(255,255,255,.03)}
+.blacklist-title{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);
+  display:flex;align-items:center;gap:8px}
+.blacklist-count{background:rgba(255,77,77,.2);color:var(--danger);border-radius:20px;
+  padding:1px 8px;font-size:11px;font-family:var(--body)}
+.blacklist-chevron{color:var(--muted);font-size:12px;transition:transform .2s}
+.blacklist-chevron.open{transform:rotate(180deg)}
+.blacklist-body{display:none;padding:0 18px 16px;border-top:1px solid var(--border)}
+.blacklist-body.open{display:block}
+.blacklist-input-row{display:flex;gap:8px;margin-top:12px;margin-bottom:10px}
+.blacklist-input{flex:1;background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:var(--r);color:var(--text);font-family:var(--body);font-size:14px;
+  padding:9px 14px;outline:none;transition:border-color .2s}
+.blacklist-input:focus{border-color:var(--danger)}
+.blacklist-add-btn{padding:9px 18px;background:var(--danger);color:#fff;border:none;
+  border-radius:var(--r);font-family:var(--disp);font-size:16px;letter-spacing:.06em;
+  cursor:pointer;white-space:nowrap;transition:opacity .15s}
+.blacklist-add-btn:hover{opacity:.85}
+.blacklist-tags{display:flex;flex-wrap:wrap;gap:6px;min-height:24px}
+.blacklist-tag{display:inline-flex;align-items:center;gap:6px;
+  background:rgba(255,77,77,.12);border:1px solid rgba(255,77,77,.25);
+  border-radius:20px;padding:3px 10px;font-size:12px;color:#ff8080}
+.blacklist-tag button{background:none;border:none;color:#ff8080;cursor:pointer;
+  font-size:14px;line-height:1;padding:0;opacity:.7;transition:opacity .15s}
+.blacklist-tag button:hover{opacity:1}
+.blacklist-empty{font-size:12px;color:#3a3a3a;font-style:italic}
+.blacklist-note{font-size:11px;color:#3a3a3a;margin-top:8px}
+
+/* SEARCH */
+.search-card{width:100%;max-width:700px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:28px 28px 24px}
 .input-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
 .input-group{display:flex;flex-direction:column;gap:5px}
 label{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);font-weight:500}
-input{
-  background:rgba(255,255,255,.04);border:1px solid var(--border);
-  border-radius:var(--r);color:var(--text);font-family:var(--body);font-size:15px;
-  padding:11px 15px;outline:none;transition:border-color .2s,background .2s
-}
-input::placeholder{color:#383838}
-input:focus{border-color:var(--accent);background:rgba(29,185,84,.04)}
-
-.find-btn{
-  width:100%;padding:14px;background:var(--accent);color:#000;border:none;
+input[type=text]{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--r);
+  color:var(--text);font-family:var(--body);font-size:15px;padding:11px 15px;outline:none;
+  transition:border-color .2s,background .2s;width:100%}
+input[type=text]::placeholder{color:#383838}
+input[type=text]:focus{border-color:var(--accent);background:rgba(29,185,84,.04)}
+.find-btn{width:100%;padding:14px;background:var(--accent);color:#000;border:none;
   border-radius:var(--r);font-family:var(--disp);font-size:22px;letter-spacing:.08em;
-  cursor:pointer;transition:transform .15s,box-shadow .15s;position:relative;overflow:hidden
-}
+  cursor:pointer;transition:transform .15s,box-shadow .15s;position:relative;overflow:hidden}
 .find-btn:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(29,185,84,.35)}
 .find-btn:active{transform:translateY(0)}
 .find-btn:disabled{opacity:.45;cursor:not-allowed;transform:none;box-shadow:none}
-.find-btn.loading::after{
-  content:'';position:absolute;inset:-3px;border-radius:var(--r);
-  border:2px solid var(--accent);animation:pring 1s ease-out infinite
-}
+.find-btn.loading::after{content:'';position:absolute;inset:-3px;border-radius:var(--r);
+  border:2px solid var(--accent);animation:pring 1s ease-out infinite}
 @keyframes pring{0%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.04)}}
-
-/* error */
-.error-msg{
-  margin-top:12px;background:rgba(255,77,77,.09);border:1px solid rgba(255,77,77,.28);
-  border-radius:var(--r);padding:11px 15px;color:var(--danger);font-size:13px;display:none
-}
+.error-msg{margin-top:12px;background:rgba(255,77,77,.09);border:1px solid rgba(255,77,77,.28);
+  border-radius:var(--r);padding:11px 15px;color:var(--danger);font-size:13px;display:none}
 .error-msg.visible{display:block}
 
-/* ── RESULTS ─────────────────────────────────────────── */
+/* RESULTS */
 .result-area{width:100%;max-width:700px;margin-top:24px;display:none;animation:fadeUp .45s ease both}
 .result-area.visible{display:block}
 @keyframes fadeUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
-
 .cards-row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 
-/* ── TRACK CARD ─────────────────────────────────────── */
-.track-card{
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:20px;overflow:hidden;position:relative;transition:transform .2s
-}
+/* TRACK CARD */
+.track-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;overflow:hidden;position:relative;transition:transform .2s}
 .track-card:hover{transform:translateY(-3px)}
 .track-card.rec{border-color:rgba(29,185,84,.35);box-shadow:0 0 28px rgba(29,185,84,.08)}
-
-.card-badge{
-  position:absolute;top:11px;left:11px;z-index:2;
-  font-size:10px;letter-spacing:.12em;text-transform:uppercase;
-  padding:3px 10px;border-radius:20px;font-weight:500
-}
+.card-badge{position:absolute;top:11px;left:11px;z-index:2;font-size:10px;letter-spacing:.12em;
+  text-transform:uppercase;padding:3px 10px;border-radius:20px;font-weight:500}
 .badge-seed{background:rgba(255,255,255,.09);color:#888}
 .badge-rec{background:var(--accent);color:#000}
-
 .card-art{width:100%;aspect-ratio:1;object-fit:cover;display:block;filter:brightness(.85);transition:filter .3s}
 .track-card:hover .card-art{filter:brightness(1)}
 .card-art-ph{width:100%;aspect-ratio:1;background:linear-gradient(135deg,#1a1a1a,#222);display:flex;align-items:center;justify-content:center;font-size:44px}
-
 .card-info{padding:15px}
 .card-reason{font-size:11px;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;font-weight:500}
 .card-title{font-family:var(--disp);font-size:21px;letter-spacing:.02em;line-height:1.1;margin-bottom:3px}
 .card-artist{font-size:13px;color:var(--muted);margin-bottom:2px}
 .card-meta{font-size:12px;color:#3a3a3a;margin-bottom:12px}
 
-/* ── INLINE PLAYER ──────────────────────────────────── */
-.player-row{display:flex;align-items:center;gap:11px}
-
-.play-btn{
-  width:40px;height:40px;border-radius:50%;border:none;
-  background:var(--accent);color:#000;font-size:14px;
-  cursor:pointer;display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;transition:transform .15s,box-shadow .15s
-}
+/* PLAYER */
+.player-section-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.player-row{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.play-btn{width:38px;height:38px;border-radius:50%;border:none;background:var(--accent);color:#000;
+  font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:transform .15s,box-shadow .15s}
 .play-btn:hover{transform:scale(1.1);box-shadow:0 4px 18px rgba(29,185,84,.4)}
-.play-btn:disabled{background:#2a2a2a;color:#555;cursor:default}
-.play-btn:disabled:hover{transform:none;box-shadow:none}
-.play-btn.buffering{animation:spin 1s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
+.skip-btn{width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:none;
+  color:var(--muted);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:border-color .15s,color .15s}
+.skip-btn:hover{border-color:var(--accent);color:var(--accent)}
 
-.prog-area{flex:1;display:flex;flex-direction:column;gap:4px}
-.prog-bg{width:100%;height:3px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;cursor:pointer}
-.prog-fill{height:100%;background:var(--accent);width:0%;border-radius:2px;transition:width .22s linear}
+/* PROGRESS BAR — key fix: pointer-events on bg, not fill */
+.prog-area{flex:1;display:flex;flex-direction:column;gap:3px}
+.prog-bg{width:100%;height:6px;background:rgba(255,255,255,.08);border-radius:3px;
+  cursor:pointer;position:relative;touch-action:none}
+.prog-fill{height:100%;background:var(--accent);border-radius:3px;width:0%;
+  pointer-events:none;/* fill must NOT intercept clicks */
+  transition:width .18s linear}
+.prog-handle{position:absolute;top:50%;right:0;transform:translate(50%,-50%);
+  width:12px;height:12px;border-radius:50%;background:#fff;opacity:0;
+  pointer-events:none;transition:opacity .15s}
+.prog-bg:hover .prog-handle{opacity:1}
 .time-row{display:flex;justify-content:space-between;font-size:10px;color:#3a3a3a}
 
-/* SDK player bar */
-.sdk-status{
-  font-size:11px;color:var(--muted);font-style:italic;margin-bottom:8px
-}
-
-.sp-link{
-  display:inline-flex;align-items:center;gap:5px;margin-top:8px;
-  font-size:11px;color:var(--accent);text-decoration:none;
-  letter-spacing:.06em;text-transform:uppercase;opacity:.65;transition:opacity .2s
-}
+.sdk-status{font-size:11px;color:var(--muted);font-style:italic;margin-bottom:6px}
+.sp-link{display:inline-flex;align-items:center;gap:5px;margin-top:8px;
+  font-size:11px;color:var(--accent);text-decoration:none;letter-spacing:.06em;
+  text-transform:uppercase;opacity:.65;transition:opacity .2s}
 .sp-link:hover{opacity:1}
-
 .no-preview{font-size:11px;color:#3a3a3a;font-style:italic;margin-top:2px}
 
-/* ── NEXT BUTTON ─────────────────────────────────────── */
-.next-btn{
-  display:block;width:100%;max-width:700px;margin-top:14px;
-  padding:13px;background:transparent;border:1px solid var(--border);
-  border-radius:var(--r);color:var(--text);
-  font-family:var(--disp);font-size:20px;letter-spacing:.1em;
-  cursor:pointer;transition:border-color .2s,background .2s,transform .15s
-}
+/* NEXT BTN */
+.next-btn{display:block;width:100%;max-width:700px;margin-top:14px;padding:13px;
+  background:transparent;border:1px solid var(--border);border-radius:var(--r);color:var(--text);
+  font-family:var(--disp);font-size:20px;letter-spacing:.1em;cursor:pointer;
+  transition:border-color .2s,background .2s,transform .15s}
 .next-btn:hover{border-color:var(--accent);background:var(--accent-dim);transform:translateY(-2px)}
 
-/* ── GLOBAL PLAYER BAR ───────────────────────────────── */
-.now-playing-bar{
-  position:fixed;bottom:0;left:0;right:0;z-index:100;
+/* NOW PLAYING BAR */
+.now-playing-bar{position:fixed;bottom:0;left:0;right:0;z-index:100;
   background:rgba(10,10,10,.96);border-top:1px solid var(--border);
-  backdrop-filter:blur(12px);
-  padding:10px 24px;
-  display:none;align-items:center;gap:16px
-}
+  backdrop-filter:blur(12px);padding:10px 24px;display:none;align-items:center;gap:16px}
 .now-playing-bar.visible{display:flex}
 .npb-art{width:44px;height:44px;border-radius:6px;object-fit:cover;flex-shrink:0}
 .npb-art-ph{width:44px;height:44px;border-radius:6px;background:#222;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
 .npb-info{flex:1;min-width:0}
 .npb-title{font-family:var(--disp);font-size:16px;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .npb-artist{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.npb-controls{display:flex;align-items:center;gap:10px}
-.npb-play{
-  width:38px;height:38px;border-radius:50%;border:none;
-  background:var(--accent);color:#000;font-size:13px;
-  cursor:pointer;display:flex;align-items:center;justify-content:center;
-  transition:transform .15s
-}
+.npb-controls{display:flex;align-items:center;gap:8px}
+.npb-play{width:38px;height:38px;border-radius:50%;border:none;background:var(--accent);color:#000;
+  font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .15s}
 .npb-play:hover{transform:scale(1.1)}
 .npb-prog{flex:1;max-width:260px;display:flex;flex-direction:column;gap:3px}
-.npb-bar-bg{height:3px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;cursor:pointer}
-.npb-bar-fill{height:100%;background:var(--accent);width:0%;border-radius:2px;transition:width .5s linear}
+.npb-bar-bg{height:4px;background:rgba(255,255,255,.07);border-radius:2px;cursor:pointer;position:relative}
+.npb-bar-fill{height:100%;background:var(--accent);width:0%;border-radius:2px;pointer-events:none;transition:width .5s linear}
 .npb-times{display:flex;justify-content:space-between;font-size:10px;color:#444}
 .npb-vol{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
 .npb-vol input[type=range]{width:70px;accent-color:var(--accent);cursor:pointer}
-
 footer{margin-top:50px;text-align:center;font-size:12px;color:#2a2a2a}
-
-/* ── RESPONSIVE ─────────────────────────────────────── */
 @media(max-width:560px){
   .input-row,.cards-row{grid-template-columns:1fr}
   .now-playing-bar{padding:10px 14px}
@@ -262,78 +212,96 @@ footer{margin-top:50px;text-align:center;font-size:12px;color:#2a2a2a}
 <body>
 <div class="app">
 
-  <!-- HEADER -->
-  <header>
-    <div class="logo">DJ.AI</div>
-    <div class="eq"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
-    <p class="tagline">Drop a track &mdash; we spin the next one</p>
-  </header>
+<header>
+  <div class="logo">DJ.AI</div>
+  <div class="eq"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+  <p class="tagline">Drop a track &mdash; we spin the next one</p>
+</header>
 
-  <!-- AUTH BAR -->
-  <div class="auth-bar" id="auth-bar">
-    <div class="auth-status">
-      <div class="auth-dot" id="auth-dot"></div>
-      <span id="auth-label">Connect Spotify Premium to enable full playback</span>
-    </div>
-    <button class="login-btn" id="login-btn" onclick="doLogin()">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-      CONNECT SPOTIFY
-    </button>
+<!-- AUTH -->
+<div class="auth-bar" id="auth-bar">
+  <div class="auth-status">
+    <div class="auth-dot" id="auth-dot"></div>
+    <span id="auth-label">Connect Spotify Premium for full playback</span>
   </div>
-
-  <div class="premium-warn" id="premium-warn">
-    ⚠️ Spotify Web Playback SDK requires a <strong>Spotify Premium</strong> account. Free accounts can still use the 30‑second preview player.
-  </div>
-
-  <!-- SEARCH -->
-  <div class="search-card">
-    <div class="input-row">
-      <div class="input-group">
-        <label for="song-in">Song Title</label>
-        <input id="song-in" type="text" placeholder="e.g. Blinding Lights" autocomplete="off"/>
-      </div>
-      <div class="input-group">
-        <label for="artist-in">Artist Name</label>
-        <input id="artist-in" type="text" placeholder="e.g. The Weeknd" autocomplete="off"/>
-      </div>
-    </div>
-    <button class="find-btn" id="find-btn">FIND NEXT TRACK</button>
-    <div class="error-msg" id="error-msg"></div>
-  </div>
-
-  <!-- RESULTS -->
-  <div class="result-area" id="result-area">
-    <div class="cards-row">
-      <div class="track-card" id="seed-card">
-        <div class="card-badge badge-seed">Now Playing</div>
-        <div id="seed-art"></div>
-        <div class="card-info">
-          <div class="card-title"  id="seed-name"></div>
-          <div class="card-artist" id="seed-artist"></div>
-          <div class="card-meta"   id="seed-meta"></div>
-          <div id="seed-player"></div>
-        </div>
-      </div>
-      <div class="track-card rec" id="rec-card">
-        <div class="card-badge badge-rec" id="rec-badge">Next Up</div>
-        <div id="rec-art"></div>
-        <div class="card-info">
-          <div class="card-reason" id="rec-reason"></div>
-          <div class="card-title"  id="rec-name"></div>
-          <div class="card-artist" id="rec-artist"></div>
-          <div class="card-meta"   id="rec-meta"></div>
-          <div id="rec-player"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <button class="next-btn" id="next-btn" style="display:none" onclick="findAnother()">↻ FIND NEXT TRACK</button>
-
-  <footer>Powered by Spotify &bull; DJ.AI</footer>
+  <button class="login-btn" id="login-btn" onclick="doLogin()">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+    CONNECT SPOTIFY
+  </button>
+</div>
+<div class="premium-warn" id="premium-warn">
+  ⚠️ Spotify Web Playback SDK requires <strong>Spotify Premium</strong>. Free accounts use the 30‑second preview player.
 </div>
 
-<!-- NOW-PLAYING BAR (SDK) -->
+<!-- BLACKLIST PANEL -->
+<div class="blacklist-panel" id="blacklist-panel">
+  <div class="blacklist-header" onclick="toggleBlacklist()">
+    <div class="blacklist-title">
+      🚫 Artist Blacklist
+      <span class="blacklist-count" id="bl-count">0</span>
+    </div>
+    <span class="blacklist-chevron" id="bl-chevron">▼</span>
+  </div>
+  <div class="blacklist-body" id="bl-body">
+    <div class="blacklist-input-row">
+      <input type="text" class="blacklist-input" id="bl-input" placeholder="Artist name to block…" autocomplete="off"/>
+      <button class="blacklist-add-btn" onclick="addToBlacklist()">BLOCK</button>
+    </div>
+    <div class="blacklist-tags" id="bl-tags">
+      <span class="blacklist-empty">No artists blocked yet</span>
+    </div>
+    <div class="blacklist-note">⚠️ List resets when the server restarts (by design)</div>
+  </div>
+</div>
+
+<!-- SEARCH -->
+<div class="search-card">
+  <div class="input-row">
+    <div class="input-group">
+      <label for="song-in">Song Title</label>
+      <input id="song-in" type="text" placeholder="e.g. Blinding Lights" autocomplete="off"/>
+    </div>
+    <div class="input-group">
+      <label for="artist-in">Artist Name</label>
+      <input id="artist-in" type="text" placeholder="e.g. The Weeknd" autocomplete="off"/>
+    </div>
+  </div>
+  <button class="find-btn" id="find-btn">FIND NEXT TRACK</button>
+  <div class="error-msg" id="error-msg"></div>
+</div>
+
+<!-- RESULTS -->
+<div class="result-area" id="result-area">
+  <div class="cards-row">
+    <div class="track-card" id="seed-card">
+      <div class="card-badge badge-seed">Now Playing</div>
+      <div id="seed-art"></div>
+      <div class="card-info">
+        <div class="card-title"  id="seed-name"></div>
+        <div class="card-artist" id="seed-artist"></div>
+        <div class="card-meta"   id="seed-meta"></div>
+        <div id="seed-player"></div>
+      </div>
+    </div>
+    <div class="track-card rec" id="rec-card">
+      <div class="card-badge badge-rec" id="rec-badge">Next Up</div>
+      <div id="rec-art"></div>
+      <div class="card-info">
+        <div class="card-reason" id="rec-reason"></div>
+        <div class="card-title"  id="rec-name"></div>
+        <div class="card-artist" id="rec-artist"></div>
+        <div class="card-meta"   id="rec-meta"></div>
+        <div id="rec-player"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<button class="next-btn" id="next-btn" style="display:none" onclick="findAnother()">↻ FIND NEXT TRACK</button>
+<footer>Powered by Spotify &bull; DJ.AI</footer>
+</div>
+
+<!-- NOW PLAYING BAR -->
 <div class="now-playing-bar" id="npb">
   <div class="npb-art-ph" id="npb-art-wrap">🎵</div>
   <div class="npb-info">
@@ -356,360 +324,243 @@ footer{margin-top:50px;text-align:center;font-size:12px;color:#2a2a2a}
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  STATE
-// ═══════════════════════════════════════════════════════
-let accessToken   = null;
-let refreshToken  = null;
-let tokenExpAt    = 0;      // epoch ms
-let sdkPlayer     = null;
-let sdkDeviceId   = null;
-let sdkReady      = false;
-let sdkPaused     = true;
-let currentSong   = '';
-let currentArtist = '';
-let previewAudios = {};     // containerId → Audio
-let currentTrackData = {}; // uri → track data
+// ═══════════════════════════════════════════════
+let accessToken  = null, refreshToken = null, tokenExpAt = 0;
+let sdkPlayer    = null, sdkDeviceId  = null;
+let sdkReady     = false, sdkPaused   = true;
+let currentSong  = '', currentArtist = '';
+let previewAudios = {};   // containerId → Audio
+let currentRecTrack = null; // last recommended track object
 
-// ═══════════════════════════════════════════════════════
-//  UTILS
-// ═══════════════════════════════════════════════════════
-const fmtMs = ms => {
-  const s = Math.floor(ms/1000);
-  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
-};
+const $ = id => document.getElementById(id);
+const fmtMs = ms => { const s=Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
 
-const $  = id => document.getElementById(id);
-const show = (el, vis=true) => { if(typeof el==='string') el=$( el); el.style.display = vis?'':'none'; };
+// ═══════════════════════════════════════════════
+//  PROMOTE TRACK AS NEW SEED
+// ═══════════════════════════════════════════════
+function promoteAsSeed(track) {
+  if (!track) return;
+  const primaryArtist = track.artist.split(',')[0].trim();
+  currentSong   = track.name;
+  currentArtist = primaryArtist;
+  $('song-in').value   = currentSong;
+  $('artist-in').value = currentArtist;
+}
 
-// ═══════════════════════════════════════════════════════
-//  AUTH – parse tokens from URL fragment on callback
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+//  AUTH
+// ═══════════════════════════════════════════════
 function parseFragment() {
-  const hash = location.hash.slice(1);
-  if (!hash) return;
-  const p = new URLSearchParams(hash);
-  const at  = p.get('at');
-  const rt  = p.get('rt');
-  const exp = parseInt(p.get('exp') || '3600', 10);
-  if (at) {
-    storeTokens(at, rt, exp);
-    history.replaceState(null, '', location.pathname); // clean URL
-  }
+  const p = new URLSearchParams(location.hash.slice(1));
+  const at = p.get('at'), rt = p.get('rt'), exp = parseInt(p.get('exp')||'3600',10);
+  if (at) { storeTokens(at, rt, exp); history.replaceState(null,'',location.pathname); }
 }
-
-function storeTokens(at, rt, expiresIn) {
-  accessToken  = at;
-  refreshToken = rt;
-  tokenExpAt   = Date.now() + expiresIn * 1000;
-  localStorage.setItem('dj_at',  at);
-  localStorage.setItem('dj_rt',  rt || '');
+function storeTokens(at, rt, exp) {
+  accessToken = at; refreshToken = rt; tokenExpAt = Date.now() + exp*1000;
+  localStorage.setItem('dj_at', at);
+  localStorage.setItem('dj_rt', rt||'');
   localStorage.setItem('dj_exp', String(tokenExpAt));
-  updateAuthUI(true);
-  initSDK();
+  updateAuthUI(true); initSDK();
 }
-
 function loadStoredTokens() {
-  const at  = localStorage.getItem('dj_at');
-  const rt  = localStorage.getItem('dj_rt');
-  const exp = parseInt(localStorage.getItem('dj_exp') || '0', 10);
-  if (at && Date.now() < exp - 30000) {
-    accessToken  = at;
-    refreshToken = rt;
-    tokenExpAt   = exp;
-    updateAuthUI(true);
-    return true;
-  }
-  if (rt) {
-    // Expired but have refresh token — silent refresh
-    refreshTokenSilently(rt);
-    return true;
-  }
+  const at=localStorage.getItem('dj_at'), rt=localStorage.getItem('dj_rt');
+  const exp=parseInt(localStorage.getItem('dj_exp')||'0',10);
+  if (at && Date.now() < exp-30000) { accessToken=at; refreshToken=rt; tokenExpAt=exp; updateAuthUI(true); return true; }
+  if (rt) { refreshTokenSilently(rt); return true; }
   return false;
 }
-
 async function refreshTokenSilently(rt) {
   try {
-    const res  = await fetch('/api/refresh', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({refresh_token: rt})
-    });
-    if (!res.ok) throw new Error('refresh failed');
-    const data = await res.json();
-    storeTokens(data.access_token, data.refresh_token, data.expires_in);
-  } catch {
-    clearAuth();
-  }
+    const res = await fetch('/api/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:rt})});
+    if (!res.ok) throw new Error();
+    const d = await res.json();
+    storeTokens(d.access_token, d.refresh_token, d.expires_in);
+  } catch { clearAuth(); }
 }
-
 function clearAuth() {
-  accessToken = refreshToken = null; tokenExpAt = 0;
-  localStorage.removeItem('dj_at');
-  localStorage.removeItem('dj_rt');
-  localStorage.removeItem('dj_exp');
-  if (sdkPlayer) { sdkPlayer.disconnect(); sdkPlayer = null; }
-  sdkReady = false; sdkDeviceId = null;
-  updateAuthUI(false);
-  $('npb').classList.remove('visible');
+  accessToken=refreshToken=null; tokenExpAt=0;
+  ['dj_at','dj_rt','dj_exp'].forEach(k=>localStorage.removeItem(k));
+  if (sdkPlayer) { sdkPlayer.disconnect(); sdkPlayer=null; }
+  sdkReady=false; sdkDeviceId=null;
+  updateAuthUI(false); $('npb').classList.remove('visible');
 }
-
-function doLogin()  { window.location.href = '/login'; }
+function doLogin()  { window.location.href='/login'; }
 function doLogout() { clearAuth(); }
-
-function updateAuthUI(loggedIn) {
-  const dot   = $('auth-dot');
-  const label = $('auth-label');
-  const loginBtn  = $('login-btn');
-
-  if (loggedIn) {
-    dot.className = 'auth-dot connected';
-    label.textContent = 'Spotify Premium connected — full playback enabled';
-    loginBtn.style.display = 'none';
-
-    // Add logout button if not there
-    if (!$('logout-btn')) {
-      const btn = document.createElement('button');
-      btn.id = 'logout-btn';
-      btn.className = 'logout-btn';
-      btn.textContent = 'Disconnect';
-      btn.onclick = doLogout;
-      $('auth-bar').appendChild(btn);
-    }
-  } else {
-    dot.className = 'auth-dot';
-    label.textContent = 'Connect Spotify Premium to enable full playback';
-    loginBtn.style.display = '';
-    const lb = $('logout-btn');
-    if (lb) lb.remove();
-  }
+function updateAuthUI(ok) {
+  $('auth-dot').className = 'auth-dot' + (ok?' connected':'');
+  $('auth-label').textContent = ok ? 'Spotify Premium connected — full playback enabled'
+                                   : 'Connect Spotify Premium for full playback';
+  $('login-btn').style.display = ok ? 'none' : '';
+  const lb = $('logout-btn');
+  if (ok && !lb) {
+    const b=document.createElement('button'); b.id='logout-btn'; b.className='logout-btn';
+    b.textContent='Disconnect'; b.onclick=doLogout; $('auth-bar').appendChild(b);
+  } else if (!ok && lb) lb.remove();
 }
+setInterval(()=>{ if(refreshToken&&tokenExpAt&&Date.now()>tokenExpAt-60000) refreshTokenSilently(refreshToken); },30000);
 
-// Auto-refresh before expiry
-setInterval(async () => {
-  if (refreshToken && tokenExpAt && Date.now() > tokenExpAt - 60000) {
-    await refreshTokenSilently(refreshToken);
-  }
-}, 30000);
-
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  SPOTIFY WEB PLAYBACK SDK
-// ═══════════════════════════════════════════════════════
-window.onSpotifyWebPlaybackSDKReady = () => {
-  if (accessToken) initSDK();
-};
-
+// ═══════════════════════════════════════════════
+window.onSpotifyWebPlaybackSDKReady = () => { if(accessToken) initSDK(); };
 function initSDK() {
-  if (!accessToken || !window.Spotify) return;
-  if (sdkPlayer) { sdkPlayer.disconnect(); }
-
+  if (!accessToken||!window.Spotify) return;
+  if (sdkPlayer) sdkPlayer.disconnect();
   sdkPlayer = new Spotify.Player({
     name: 'DJ.AI Web Player',
     getOAuthToken: async cb => {
-      // Always supply a fresh token
-      if (Date.now() > tokenExpAt - 30000 && refreshToken) {
-        await refreshTokenSilently(refreshToken);
-      }
+      if (Date.now()>tokenExpAt-30000&&refreshToken) await refreshTokenSilently(refreshToken);
       cb(accessToken);
     },
     volume: 0.8,
   });
-
-  sdkPlayer.addListener('ready', ({ device_id }) => {
-    sdkDeviceId = device_id;
-    sdkReady    = true;
-    console.log('SDK ready, device:', device_id);
-    $('premium-warn').classList.remove('visible');
-  });
-
-  sdkPlayer.addListener('not_ready', () => {
-    sdkReady = false;
-    console.log('SDK device went offline');
-  });
-
-  sdkPlayer.addListener('initialization_error', ({ message }) => {
-    console.error('SDK init error:', message);
-    $('premium-warn').classList.add('visible');
-  });
-
-  sdkPlayer.addListener('authentication_error', ({ message }) => {
-    console.error('SDK auth error:', message);
-    clearAuth();
-  });
-
-  sdkPlayer.addListener('account_error', ({ message }) => {
-    console.error('SDK account error:', message);
-    $('premium-warn').classList.add('visible');
-  });
-
-  sdkPlayer.addListener('player_state_changed', state => {
-    if (!state) return;
-    sdkPaused = state.paused;
-    updateNowPlayingBar(state);
-  });
-
+  sdkPlayer.addListener('ready', ({device_id})=>{ sdkDeviceId=device_id; sdkReady=true; $('premium-warn').classList.remove('visible'); });
+  sdkPlayer.addListener('not_ready', ()=>{ sdkReady=false; });
+  sdkPlayer.addListener('initialization_error', ()=>{ $('premium-warn').classList.add('visible'); });
+  sdkPlayer.addListener('authentication_error', ()=>{ clearAuth(); });
+  sdkPlayer.addListener('account_error', ()=>{ $('premium-warn').classList.add('visible'); });
+  sdkPlayer.addListener('player_state_changed', state=>{ if(state){ sdkPaused=state.paused; updateNPB(state); } });
   sdkPlayer.connect();
 }
-
 async function playWithSDK(uri) {
-  if (!sdkReady || !sdkDeviceId) return false;
+  if (!sdkReady||!sdkDeviceId) return false;
   try {
-    await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${sdkDeviceId}`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type':  'application/json',
-      },
-      body: JSON.stringify({ uris: [uri] }),
+    await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${sdkDeviceId}`,{
+      method:'PUT',
+      headers:{'Authorization':`Bearer ${accessToken}`,'Content-Type':'application/json'},
+      body:JSON.stringify({uris:[uri]}),
     });
     return true;
-  } catch (e) {
-    console.error('Play error:', e);
-    return false;
-  }
+  } catch { return false; }
 }
+async function toggleSDKPlay() { if(sdkPlayer) await sdkPlayer.togglePlay(); }
+function setVolume(v) { if(sdkPlayer) sdkPlayer.setVolume(v/100); }
 
-async function toggleSDKPlay() {
-  if (!sdkPlayer) return;
-  await sdkPlayer.togglePlay();
-}
-
-function setVolume(v) {
-  if (sdkPlayer) sdkPlayer.setVolume(v / 100);
-}
-
-// ── Now Playing Bar ──────────────────────────────────
-function updateNowPlayingBar(state) {
+function updateNPB(state) {
   if (!state) return;
-  const track = state.track_window?.current_track;
-  if (!track) return;
-
-  const npb = $('npb');
-  npb.classList.add('visible');
-
+  const track = state.track_window?.current_track; if(!track) return;
+  $('npb').classList.add('visible');
   $('npb-title').textContent  = track.name;
   $('npb-artist').textContent = track.artists.map(a=>a.name).join(', ');
-  $('npb-play').innerHTML = state.paused ? '▶' : '⏸';
-
-  // art
-  const artWrap = $('npb-art-wrap');
-  if (track.album?.images?.[0]) {
-    artWrap.innerHTML = `<img class="npb-art" src="${track.album.images[0].url}" alt="art"/>`;
-  } else {
-    artWrap.innerHTML = '<div class="npb-art-ph">🎵</div>';
-  }
-
-  // progress
-  const dur = state.duration || 1;
-  const pos = state.position || 0;
-  $('npb-bar-fill').style.width = (pos/dur*100) + '%';
-  $('npb-cur').textContent = fmtMs(pos);
-  $('npb-dur').textContent = fmtMs(dur);
+  $('npb-play').innerHTML = state.paused?'▶':'⏸';
+  const aw=$('npb-art-wrap');
+  aw.innerHTML = track.album?.images?.[0]
+    ? `<img class="npb-art" src="${track.album.images[0].url}" alt="art"/>`
+    : '<div class="npb-art-ph">🎵</div>';
+  const dur=state.duration||1, pos=state.position||0;
+  $('npb-bar-fill').style.width=(pos/dur*100)+'%';
+  $('npb-cur').textContent=fmtMs(pos); $('npb-dur').textContent=fmtMs(dur);
 }
+setInterval(async()=>{
+  if(!sdkPlayer||sdkPaused) return;
+  try { const s=await sdkPlayer.getCurrentState(); if(s) updateNPB(s); } catch{}
+},500);
 
-// Tick progress bar
-setInterval(async () => {
-  if (!sdkPlayer || sdkPaused) return;
-  try {
-    const state = await sdkPlayer.getCurrentState();
-    if (state) updateNowPlayingBar(state);
-  } catch {}
-}, 500);
+// NPB seek
+$('npb-bar-bg').addEventListener('click', async e => {
+  if (!sdkPlayer) return;
+  const pct = (e.clientX - $('npb-bar-bg').getBoundingClientRect().left) / $('npb-bar-bg').offsetWidth;
+  const state = await sdkPlayer.getCurrentState();
+  if (state) await sdkPlayer.seek(Math.floor(pct * state.duration));
+});
 
-// ═══════════════════════════════════════════════════════
-//  PREVIEW PLAYER (fallback, no Premium needed)
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+//  PREVIEW PLAYER
+// ═══════════════════════════════════════════════
 function stopAllPreviews() {
-  Object.values(previewAudios).forEach(a => { a.pause(); a.currentTime=0; });
+  Object.values(previewAudios).forEach(a=>{ a.pause(); a.currentTime=0; });
 }
 
-function buildPlayer(containerId, track) {
+function buildPlayer(containerId, track, isRec) {
   const c = $(containerId);
   c.innerHTML = '';
+  const sdk = sdkReady && accessToken;
 
-  const sdkAvailable = sdkReady && accessToken;
-
-  // ── Section 1: Full track button (Premium SDK) ──────────────
-  if (sdkAvailable) {
-    const statusDiv = document.createElement('div');
-    statusDiv.className = 'sdk-status';
-    statusDiv.textContent = '● Full track via Spotify Premium';
-    c.appendChild(statusDiv);
+  // ── Full track (SDK) ──────────────────────────────
+  if (sdk) {
+    const lbl = document.createElement('div');
+    lbl.className = 'player-section-label';
+    lbl.textContent = '● Full track';
+    c.appendChild(lbl);
 
     const row = document.createElement('div');
     row.className = 'player-row';
 
-    const btn = document.createElement('button');
-    btn.className = 'play-btn';
-    btn.innerHTML = '▶';
-    btn.title = 'Play full track';
-    btn.onclick = async () => {
+    const playBtn = document.createElement('button');
+    playBtn.className = 'play-btn';
+    playBtn.innerHTML = '▶';
+    playBtn.title = 'Play full track';
+    playBtn.onclick = async () => {
       stopAllPreviews();
-      btn.classList.add('buffering');
-      btn.innerHTML = '○';
+      // Playing rec track → promote it as new seed
+      if (isRec) promoteAsSeed(track);
+      playBtn.innerHTML = '○';
       const ok = await playWithSDK(track.uri);
-      btn.classList.remove('buffering');
-      btn.innerHTML = ok ? '⏸' : '▶';
+      playBtn.innerHTML = ok ? '⏸' : '▶';
     };
 
-    const info = document.createElement('div');
-    info.style.cssText = 'font-size:12px;color:var(--muted)';
-    info.textContent = fmtMs(track.duration_ms);
+    // Skip button (rec card only)
+    if (isRec) {
+      const skipBtn = document.createElement('button');
+      skipBtn.className = 'skip-btn';
+      skipBtn.innerHTML = '⏭';
+      skipBtn.title = 'Skip — find a different recommendation';
+      skipBtn.onclick = () => findAnother();
+      row.appendChild(playBtn);
+      row.appendChild(skipBtn);
+    } else {
+      row.appendChild(playBtn);
+    }
 
-    row.appendChild(btn);
-    row.appendChild(info);
+    const dur = document.createElement('div');
+    dur.style.cssText = 'font-size:12px;color:var(--muted)';
+    dur.textContent = fmtMs(track.duration_ms);
+    row.appendChild(dur);
     c.appendChild(row);
   }
 
-  // ── Section 2: 30s preview player (always shown if available) ──
+  // ── 30s Preview ───────────────────────────────────
   if (track.preview_url) {
-    // Label so user knows what it is
-    const previewLabel = document.createElement('div');
-    previewLabel.style.cssText = 'font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-top:' + (sdkAvailable ? '10px' : '0') + ';margin-bottom:4px';
-    previewLabel.textContent = sdkAvailable ? '30s Preview' : '30s Preview';
-    c.appendChild(previewLabel);
-
-    buildPreviewPlayer(containerId, track);
-  } else if (!sdkAvailable) {
-    // No preview and no SDK — show message
+    if (sdk) {
+      const lbl2 = document.createElement('div');
+      lbl2.className = 'player-section-label';
+      lbl2.style.marginTop = '10px';
+      lbl2.textContent = '30s Preview';
+      c.appendChild(lbl2);
+    }
+    buildPreviewPlayer(containerId, track, isRec);
+  } else if (!sdk) {
     const note = document.createElement('div');
     note.className = 'no-preview';
-    note.textContent = 'No preview available · connect Spotify Premium for full playback';
+    note.textContent = 'No preview · connect Spotify Premium for full playback';
     c.appendChild(note);
   }
 
-  // ── Section 3: Open in Spotify link ─────────────────────────
+  // ── Open in Spotify ───────────────────────────────
   if (track.spotify_url) {
     const a = document.createElement('a');
     a.href = track.spotify_url;
-    a.target = '_blank';
-    a.rel = 'noopener';
-    a.className = 'sp-link';
+    a.target = '_blank'; a.rel = 'noopener'; a.className = 'sp-link';
     a.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>Open in Spotify`;
-
-    // When user opens in Spotify: promote this track as new seed
-    // and immediately queue up the next recommendation
     a.addEventListener('click', () => {
-      const primaryArtist = track.artist.split(',')[0].trim();
-      currentSong   = track.name;
-      currentArtist = primaryArtist;
-      $('song-in').value   = currentSong;
-      $('artist-in').value = currentArtist;
-      // Auto-fetch next recommendation after a short delay
-      // (give the Spotify tab time to open first)
-      setTimeout(() => {
-        stopAllPreviews();
-        fetchRec(currentSong, currentArtist)
-          .then(data => renderResult(data))
-          .catch(() => {}); // silent fail — user is in Spotify anyway
-      }, 800);
+      // Opening in Spotify → promote this track
+      if (isRec) {
+        promoteAsSeed(track);
+        setTimeout(() => {
+          stopAllPreviews();
+          fetchRec(currentSong, currentArtist)
+            .then(data => renderResult(data))
+            .catch(()=>{});
+        }, 800);
+      }
     });
-
     c.appendChild(a);
   }
 }
 
-function buildPreviewPlayer(containerId, track) {
+function buildPreviewPlayer(containerId, track, isRec) {
   const c = $(containerId);
   if (!track.preview_url) return;
 
@@ -720,94 +571,176 @@ function buildPreviewPlayer(containerId, track) {
   const row = document.createElement('div');
   row.className = 'player-row';
 
-  const btn = document.createElement('button');
-  btn.className = 'play-btn';
-  btn.innerHTML = '▶';
-  btn.title = 'Play 30s preview';
+  const playBtn = document.createElement('button');
+  playBtn.className = 'play-btn';
+  playBtn.innerHTML = '▶';
+  playBtn.title = 'Play 30s preview';
 
-  const prog = document.createElement('div');
-  prog.className = 'prog-area';
-  const bg = document.createElement('div');
-  bg.className = 'prog-bg';
-  const fill = document.createElement('div');
-  fill.className = 'prog-fill';
-  bg.appendChild(fill);
-  const times = document.createElement('div');
-  times.className = 'time-row';
-  const tc = document.createElement('span'); tc.textContent = '0:00';
-  const td = document.createElement('span'); td.textContent = '0:30';
+  // Skip button for rec card (no-SDK mode)
+  if (isRec && !(sdkReady && accessToken)) {
+    const skipBtn = document.createElement('button');
+    skipBtn.className = 'skip-btn';
+    skipBtn.innerHTML = '⏭';
+    skipBtn.title = 'Skip — find a different recommendation';
+    skipBtn.onclick = () => findAnother();
+    row.appendChild(playBtn);
+    row.appendChild(skipBtn);
+  } else {
+    row.appendChild(playBtn);
+  }
+
+  // Progress
+  const prog = document.createElement('div'); prog.className='prog-area';
+  const bg   = document.createElement('div'); bg.className='prog-bg';
+  const fill = document.createElement('div'); fill.className='prog-fill';
+  const handle = document.createElement('div'); handle.className='prog-handle';
+  bg.appendChild(fill); bg.appendChild(handle);
+  const times = document.createElement('div'); times.className='time-row';
+  const tc = document.createElement('span'); tc.textContent='0:00';
+  const td = document.createElement('span'); td.textContent='0:30';
   times.appendChild(tc); times.appendChild(td);
   prog.appendChild(bg); prog.appendChild(times);
-  row.appendChild(btn); row.appendChild(prog);
+  row.appendChild(prog);
   c.appendChild(row);
 
-  btn.onclick = () => {
-    // Pause all other previews
-    Object.entries(previewAudios).forEach(([id, a]) => {
-      if (id !== containerId && !a.paused) {
-        a.pause(); a.currentTime = 0;
-        // reset that card's play button
-        const otherCard = document.getElementById(id);
-        if (otherCard) {
-          const ob = otherCard.querySelector('.play-btn');
-          if (ob) ob.innerHTML = '▶';
-        }
+  // Play/pause
+  playBtn.onclick = () => {
+    Object.entries(previewAudios).forEach(([id,a]) => {
+      if (id!==containerId && !a.paused) {
+        a.pause(); a.currentTime=0;
+        const ob = document.getElementById(id)?.querySelector?.('.play-btn');
+        if (ob) ob.innerHTML='▶';
       }
     });
-    if (audio.paused) { audio.play().catch(()=>{}); btn.innerHTML = '⏸'; }
-    else              { audio.pause();               btn.innerHTML = '▶'; }
+    if (audio.paused) {
+      // Playing rec preview → promote as seed
+      if (isRec) promoteAsSeed(track);
+      audio.play().catch(()=>{});
+      playBtn.innerHTML='⏸';
+    } else {
+      audio.pause(); playBtn.innerHTML='▶';
+    }
   };
 
+  // Progress update
   audio.ontimeupdate = () => {
-    const pct = (audio.currentTime / (audio.duration || 30)) * 100;
+    const dur = audio.duration || 30;
+    const pct = (audio.currentTime / dur) * 100;
     fill.style.width = pct + '%';
+    handle.style.left = pct + '%';
     tc.textContent = fmtMs(audio.currentTime * 1000);
+    td.textContent = fmtMs(dur * 1000);
   };
   audio.onended = () => {
-    btn.innerHTML = '▶';
-    fill.style.width = '0%';
-    tc.textContent = '0:00';
+    playBtn.innerHTML='▶'; fill.style.width='0%'; handle.style.left='0%'; tc.textContent='0:00';
   };
-  bg.onclick = e => {
-    const pct = (e.clientX - bg.getBoundingClientRect().left) / bg.offsetWidth;
+
+  // ── SEEK / SCRUB FIX ──────────────────────────────
+  // Use mousedown+mousemove so dragging works too
+  let seeking = false;
+
+  function seekTo(e) {
+    const rect = bg.getBoundingClientRect();
+    const pct  = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
     audio.currentTime = pct * (audio.duration || 30);
-  };
+    fill.style.width  = (pct * 100) + '%';
+    handle.style.left = (pct * 100) + '%';
+  }
+
+  bg.addEventListener('mousedown', e => { seeking=true; seekTo(e); e.preventDefault(); });
+  window.addEventListener('mousemove', e => { if(seeking) seekTo(e); });
+  window.addEventListener('mouseup',   () => { seeking=false; });
+
+  // Touch support
+  bg.addEventListener('touchstart', e => { seeking=true; seekTo(e.touches[0]); e.preventDefault(); }, {passive:false});
+  window.addEventListener('touchmove',  e => { if(seeking) seekTo(e.touches[0]); }, {passive:false});
+  window.addEventListener('touchend',   () => { seeking=false; });
 }
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  ART
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════
 function buildArt(wrapId, track) {
-  const w = $(wrapId);
-  w.innerHTML = track.image
-    ? `<img class="card-art" src="${track.image}" alt="${track.name.replace(/"/g,'')}" />`
+  $(wrapId).innerHTML = track.image
+    ? `<img class="card-art" src="${track.image}" alt="${track.name.replace(/"/g,'')}"/>`
     : `<div class="card-art-ph">🎵</div>`;
 }
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+//  BLACKLIST
+// ═══════════════════════════════════════════════
+function toggleBlacklist() {
+  const body = $('bl-body'), chev = $('bl-chevron');
+  const open = body.classList.toggle('open');
+  chev.classList.toggle('open', open);
+}
+
+async function addToBlacklist() {
+  const input = $('bl-input');
+  const name  = input.value.trim();
+  if (!name) return;
+  try {
+    const res = await fetch('/api/blacklist', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({artist: name}),
+    });
+    if (res.ok) { input.value=''; await refreshBlacklistUI(); }
+  } catch {}
+}
+
+async function removeFromBlacklist(artist) {
+  try {
+    await fetch(`/api/blacklist?artist=${encodeURIComponent(artist)}`, {method:'DELETE'});
+    await refreshBlacklistUI();
+  } catch {}
+}
+
+async function refreshBlacklistUI() {
+  try {
+    const res  = await fetch('/api/blacklist');
+    const data = await res.json();
+    const list = data.blacklist || [];
+    $('bl-count').textContent = list.length;
+    const tags = $('bl-tags');
+    if (list.length === 0) {
+      tags.innerHTML = '<span class="blacklist-empty">No artists blocked yet</span>';
+      return;
+    }
+    tags.innerHTML = '';
+    list.forEach(artist => {
+      const tag = document.createElement('div');
+      tag.className = 'blacklist-tag';
+      tag.innerHTML = `<span>${artist}</span><button onclick="removeFromBlacklist('${artist.replace(/'/g,"\\'")}')">×</button>`;
+      tags.appendChild(tag);
+    });
+  } catch {}
+}
+
+// Keyboard shortcut for blacklist input
+$('bl-input').addEventListener('keydown', e => { if(e.key==='Enter') addToBlacklist(); });
+
+// ═══════════════════════════════════════════════
 //  RECOMMENDATION
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════
 async function fetchRec(song, artist) {
   const r = await fetch('/api/recommend', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
+    method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({song, artist}),
   });
-  if (!r.ok) {
-    const e = await r.json().catch(()=>({detail:'Unknown error'}));
-    throw new Error(e.detail||'Request failed');
-  }
+  if (!r.ok) { const e=await r.json().catch(()=>({detail:'Unknown error'})); throw new Error(e.detail||'Request failed'); }
   return r.json();
 }
 
 function renderResult(data) {
-  const { seed, recommendation: rec } = data;
+  const {seed, recommendation: rec} = data;
+  currentRecTrack = rec;
 
   buildArt('seed-art', seed);
   $('seed-name').textContent   = seed.name;
   $('seed-artist').textContent = seed.artist;
   $('seed-meta').textContent   = `${seed.album} · ${seed.year}`;
-  buildPlayer('seed-player', seed);
+  buildPlayer('seed-player', seed, false);
 
   buildArt('rec-art', rec);
   $('rec-reason').textContent  = rec.match_reason;
@@ -815,48 +748,30 @@ function renderResult(data) {
   $('rec-name').textContent    = rec.name;
   $('rec-artist').textContent  = rec.artist;
   $('rec-meta').textContent    = `${rec.album} · ${rec.year}`;
-  buildPlayer('rec-player', rec);
+  buildPlayer('rec-player', rec, true);
 
   $('result-area').classList.add('visible');
   $('next-btn').style.display = 'block';
 
-  // ── Promote recommendation → new seed for the next round ──
-  // The recommended track becomes the new "current song" so that
-  // clicking "Find Next" chains forward from the recommendation.
-  // Pull the primary artist name (first artist before any comma).
-  const primaryArtist = rec.artist.split(',')[0].trim();
-  currentSong   = rec.name;
-  currentArtist = primaryArtist;
-
-  // Update input fields so the user sees what's now the seed
-  $('song-in').value   = currentSong;
-  $('artist-in').value = currentArtist;
+  // Promote rec as new seed so ↻ chains forward
+  promoteAsSeed(rec);
 }
 
 async function doSearch() {
-  const song   = $('song-in').value.trim();
-  const artist = $('artist-in').value.trim();
-  const btn    = $('find-btn');
-  const errEl  = $('error-msg');
-
-  if (!song || !artist) {
-    errEl.textContent = 'Please enter both a song title and artist name.';
-    errEl.classList.add('visible');
-    return;
-  }
+  const song  = $('song-in').value.trim();
+  const artist= $('artist-in').value.trim();
+  const btn   = $('find-btn'), errEl = $('error-msg');
+  if (!song||!artist) { errEl.textContent='Please enter both a song title and artist name.'; errEl.classList.add('visible'); return; }
   errEl.classList.remove('visible');
   stopAllPreviews();
   btn.disabled=true; btn.classList.add('loading'); btn.textContent='SEARCHING…';
-  // currentSong/currentArtist will be updated inside renderResult
   currentSong=song; currentArtist=artist;
-
   try {
     const data = await fetchRec(song, artist);
     renderResult(data);
     $('result-area').scrollIntoView({behavior:'smooth',block:'start'});
   } catch(e) {
-    errEl.textContent = e.message;
-    errEl.classList.add('visible');
+    errEl.textContent=e.message; errEl.classList.add('visible');
   } finally {
     btn.disabled=false; btn.classList.remove('loading'); btn.textContent='FIND NEXT TRACK';
   }
@@ -867,40 +782,33 @@ async function findAnother() {
   const btn = $('next-btn');
   btn.textContent='↻ SEARCHING…'; btn.disabled=true;
   try {
-    // currentSong/currentArtist already point to the last recommendation
     const data = await fetchRec(currentSong, currentArtist);
     renderResult(data);
   } catch(e) {
-    $('error-msg').textContent=e.message;
-    $('error-msg').classList.add('visible');
+    $('error-msg').textContent=e.message; $('error-msg').classList.add('visible');
   } finally {
     btn.textContent='↻ FIND NEXT TRACK'; btn.disabled=false;
   }
 }
 
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════
 //  BOOT
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════
 (function boot() {
-  parseFragment();          // handle OAuth callback tokens in #fragment
-  if (!accessToken) {
-    loadStoredTokens();     // restore from localStorage if still valid
-  }
-
-  // Auth error param
+  parseFragment();
+  if (!accessToken) loadStoredTokens();
   const err = new URLSearchParams(location.search).get('auth_error');
   if (err) {
-    const el = $('error-msg');
-    el.textContent = `Spotify login failed: ${err}. Please try again.`;
-    el.classList.add('visible');
+    $('error-msg').textContent=`Spotify login failed: ${err}. Please try again.`;
+    $('error-msg').classList.add('visible');
     history.replaceState(null,'',location.pathname);
   }
+  refreshBlacklistUI();
 })();
 
-// Events
 $('find-btn').addEventListener('click', doSearch);
-$('song-in').addEventListener('keydown',  e => e.key==='Enter' && $('artist-in').focus());
-$('artist-in').addEventListener('keydown', e => e.key==='Enter' && doSearch());
+$('song-in').addEventListener('keydown',  e=>e.key==='Enter'&&$('artist-in').focus());
+$('artist-in').addEventListener('keydown',e=>e.key==='Enter'&&doSearch());
 </script>
 </body>
 </html>

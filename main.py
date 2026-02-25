@@ -23,8 +23,10 @@ Spotify DJ – FastAPI backend
 Features:
 - Preview URL scraped from embed (API returns null for new apps)
 - Blacklist: in-memory list, resets on server restart, user-managed via API
-- Lyrics filter: only return tracks where track_number > 0 and
-  album_type is 'album' or 'single' (filters out podcasts/audiobooks)
+- Lyrics filter: only return tracks where album_type is 'album' or 'single'
+- Popularity filtering: prefer popular (>60), balanced (30-70), or underground (<40)
+- Genre switching: stay in same genre pool or allow genre hops
+- View counter: persistent in-memory counter since last server start
 - Only uses Feb-2026-safe Spotify API endpoints
 """
 
@@ -43,10 +45,10 @@ SCOPES = (
 app = FastAPI()
 
 # ─────────────────────────────────────────────────────────────────
-#  IN-MEMORY BLACKLIST  (resets on every server restart)
+#  IN-MEMORY STATE  (all reset on server restart)
 # ─────────────────────────────────────────────────────────────────
-# Stored as lowercase for case-insensitive matching
-_blacklist: set = set()
+_blacklist: set = set()   # lowercase artist names
+_view_count: int = 0       # page view counter
 
 # ─────────────────────────────────────────────────────────────────
 #  CLIENT-CREDENTIALS TOKEN
@@ -281,6 +283,7 @@ def fmt(t: dict) -> dict:
         "spotify_url": t.get("external_urls", {}).get("spotify", ""),
         "image":       images[0]["url"] if images else "",
         "duration_ms": t.get("duration_ms", 0),
+        "popularity":  t.get("popularity", 0),
     }
 
 # ─────────────────────────────────────────────────────────────────
@@ -289,6 +292,8 @@ def fmt(t: dict) -> dict:
 class SearchRequest(BaseModel):
     song: str
     artist: str
+    popularity: str = "balanced"   # "popular" | "balanced" | "underground"
+    genre_switch: bool = True       # allow genre variety
 
 class RefreshRequest(BaseModel):
     refresh_token: str
@@ -362,6 +367,30 @@ def remove_from_blacklist(artist: str = Query(...)):
     _blacklist.discard(key)
     return {"blacklist": sorted(_blacklist), "removed": artist}
 
+# ── View counter ──────────────────────────────────────────────────
+@app.get("/api/views")
+def get_views():
+    return {"views": _view_count}
+
+@app.post("/api/views/increment")
+def increment_views():
+    global _view_count
+    _view_count += 1
+    return {"views": _view_count}
+
+# ── Popularity filter helper ───────────────────────────────────────
+def popularity_filter(tracks: list, mode: str) -> list:
+    """Filter tracks by popularity preference."""
+    if mode == "popular":
+        hi = [t for t in tracks if t.get("popularity", 0) >= 60]
+        return hi if hi else tracks   # fallback to all if none qualify
+    elif mode == "underground":
+        lo = [t for t in tracks if t.get("popularity", 0) < 40]
+        return lo if lo else tracks
+    else:  # balanced — prefer mid range but accept anything
+        mid = [t for t in tracks if 30 <= t.get("popularity", 50) <= 70]
+        return mid if mid else tracks
+
 # ── Recommendations ───────────────────────────────────────────────
 @app.post("/api/recommend")
 def recommend(req: SearchRequest):
@@ -374,7 +403,7 @@ def recommend(req: SearchRequest):
     seed_artist_name = seed["artists"][0]["name"]
     seed_id          = seed["id"]
 
-    # Build pools and apply music + blacklist filter
+    # Build pools
     pool1 = filter_tracks(get_artist_tracks(seed_artist_id, seed_artist_name, seed_id))
     pool2 = filter_tracks(search_tracks_by_year(seed_year, seed_id))
     pool3 = filter_tracks(
@@ -382,13 +411,22 @@ def recommend(req: SearchRequest):
         + search_tracks_by_year(seed_year + 1, seed_id)
     )
 
-    groups    = [(pool1, "Same Artist"), (pool2, "Same Year"), (pool3, "±1 Year")]
+    # Genre switching: if disabled, weight heavily toward same-artist pool
+    if not req.genre_switch:
+        groups = [(pool1, "Same Artist")] * 3 + [(pool2, "Same Year")]
+    else:
+        groups = [(pool1, "Same Artist"), (pool2, "Same Year"), (pool3, "±1 Year")]
+
     non_empty = [(p, lbl) for p, lbl in groups if p]
     if not non_empty:
         raise HTTPException(404, "No recommendations found. Try a different song or adjust the blacklist.")
 
     pool, reason = random.choice(non_empty)
-    pick = random.choice(pool)
+
+    # Apply popularity filter
+    filtered = popularity_filter(pool, req.popularity)
+
+    pick = random.choice(filtered)
 
     return {
         "seed":           fmt(seed),

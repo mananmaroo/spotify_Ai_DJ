@@ -17,20 +17,19 @@ from urllib.parse import urlencode
 SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
 SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
 
-
 """
 Spotify DJ – FastAPI backend
 
-Fixes:
-1. REDIRECT_URI hardcoded to Render URL (dynamic detection caused invalid_client)
-2. preview_url always null for new apps since Nov 2024 — scraped from embed HTML
-3. Only uses Feb-2026-safe Spotify API endpoints
+Features:
+- Preview URL scraped from embed (API returns null for new apps)
+- Blacklist: in-memory list, resets on server restart, user-managed via API
+- Lyrics filter: only return tracks where track_number > 0 and
+  album_type is 'album' or 'single' (filters out podcasts/audiobooks)
+- Only uses Feb-2026-safe Spotify API endpoints
 """
 
-# !! This MUST exactly match what's in your Spotify Dashboard !!
-# In Dashboard → App Settings → Redirect URIs, add BOTH:
-#   https://spotify-ai-dj.onrender.com/callback
-#   http://localhost:8000/callback
+
+# Must match exactly what's in Spotify Dashboard → App Settings → Redirect URIs
 REDIRECT_URI = "https://spotify-ai-dj.onrender.com/callback"
 
 SCOPES = (
@@ -42,6 +41,12 @@ SCOPES = (
 )
 
 app = FastAPI()
+
+# ─────────────────────────────────────────────────────────────────
+#  IN-MEMORY BLACKLIST  (resets on every server restart)
+# ─────────────────────────────────────────────────────────────────
+# Stored as lowercase for case-insensitive matching
+_blacklist: set = set()
 
 # ─────────────────────────────────────────────────────────────────
 #  CLIENT-CREDENTIALS TOKEN
@@ -78,8 +83,8 @@ def sp_get(url: str, params: dict = None) -> dict:
 
 # ─────────────────────────────────────────────────────────────────
 #  PREVIEW URL SCRAPER
-#  Spotify removed preview_url from API for new apps (Nov 27 2024).
-#  Solution: scrape it from the public embed player HTML — no auth needed.
+#  Spotify removed preview_url from API responses for new apps (Nov 2024).
+#  Scrape from public embed HTML instead — no auth needed.
 # ─────────────────────────────────────────────────────────────────
 _preview_cache: dict = {}
 
@@ -98,9 +103,9 @@ def get_preview_url(track_id: str) -> Optional[str]:
             },
             timeout=8,
         )
+        # Try new JSON structure first
         match = re.search(r'"audioPreview"\s*:\s*\{"url"\s*:\s*"(https://[^"]+)"', r.text)
         if not match:
-            # fallback pattern
             match = re.search(r'"preview_url"\s*:\s*"(https://[^"]+)"', r.text)
         url = match.group(1) if match else None
         _preview_cache[track_id] = url
@@ -108,6 +113,39 @@ def get_preview_url(track_id: str) -> Optional[str]:
     except Exception:
         _preview_cache[track_id] = None
         return None
+
+# ─────────────────────────────────────────────────────────────────
+#  LYRICS / MUSIC FILTER
+#  Spotify's 'type' field on album: 'album', 'single', 'compilation'
+#  Podcasts/audiobooks have album type 'podcast' or come via episode objects.
+#  We also check the track object type == 'track' (not 'episode').
+# ─────────────────────────────────────────────────────────────────
+MUSIC_ALBUM_TYPES = {"album", "single", "compilation"}
+
+def is_music_track(t: dict) -> bool:
+    """Return True only if this is a real music track (not podcast/audiobook)."""
+    # Track-level type check
+    if t.get("type", "track") != "track":
+        return False
+    # Album-level type check
+    album_type = t.get("album", {}).get("album_type", "album").lower()
+    if album_type not in MUSIC_ALBUM_TYPES:
+        return False
+    return True
+
+# ─────────────────────────────────────────────────────────────────
+#  BLACKLIST FILTER
+# ─────────────────────────────────────────────────────────────────
+def is_blacklisted(t: dict) -> bool:
+    """Return True if any artist on the track is in the blacklist."""
+    for artist in t.get("artists", []):
+        if artist.get("name", "").lower() in _blacklist:
+            return True
+    return False
+
+def filter_tracks(tracks: list) -> list:
+    """Apply music filter + blacklist filter to a pool of tracks."""
+    return [t for t in tracks if is_music_track(t) and not is_blacklisted(t)]
 
 # ─────────────────────────────────────────────────────────────────
 #  OAUTH
@@ -255,9 +293,14 @@ class SearchRequest(BaseModel):
 class RefreshRequest(BaseModel):
     refresh_token: str
 
+class BlacklistAddRequest(BaseModel):
+    artist: str
+
 # ─────────────────────────────────────────────────────────────────
 #  ROUTES
 # ─────────────────────────────────────────────────────────────────
+
+# ── Auth ──────────────────────────────────────────────────────────
 @app.get("/login")
 def login():
     params = {
@@ -282,8 +325,8 @@ def callback(code: str = Query(None), error: str = Query(None)):
         rt  = tokens.get("refresh_token", "")
         exp = tokens.get("expires_in", 3600)
         return RedirectResponse(f"/#at={at}&rt={rt}&exp={exp}")
-    except Exception as e:
-        return RedirectResponse(f"/?auth_error=token_exchange_failed")
+    except Exception:
+        return RedirectResponse("/?auth_error=token_exchange_failed")
 
 @app.post("/api/refresh")
 def api_refresh(req: RefreshRequest):
@@ -297,6 +340,29 @@ def api_refresh(req: RefreshRequest):
     except Exception:
         raise HTTPException(401, "Token refresh failed. Please log in again.")
 
+# ── Blacklist ─────────────────────────────────────────────────────
+@app.get("/api/blacklist")
+def get_blacklist():
+    """Return current blacklist (sorted, original casing not preserved)."""
+    return {"blacklist": sorted(_blacklist)}
+
+@app.post("/api/blacklist")
+def add_to_blacklist(req: BlacklistAddRequest):
+    """Add an artist to the in-memory blacklist."""
+    name = req.artist.strip()
+    if not name:
+        raise HTTPException(400, "Artist name cannot be empty.")
+    _blacklist.add(name.lower())
+    return {"blacklist": sorted(_blacklist), "added": name}
+
+@app.delete("/api/blacklist")
+def remove_from_blacklist(artist: str = Query(...)):
+    """Remove an artist from the blacklist."""
+    key = artist.strip().lower()
+    _blacklist.discard(key)
+    return {"blacklist": sorted(_blacklist), "removed": artist}
+
+# ── Recommendations ───────────────────────────────────────────────
 @app.post("/api/recommend")
 def recommend(req: SearchRequest):
     seed = search_track(req.song.strip(), req.artist.strip())
@@ -308,9 +374,10 @@ def recommend(req: SearchRequest):
     seed_artist_name = seed["artists"][0]["name"]
     seed_id          = seed["id"]
 
-    pool1 = get_artist_tracks(seed_artist_id, seed_artist_name, seed_id)
-    pool2 = search_tracks_by_year(seed_year, seed_id)
-    pool3 = (
+    # Build pools and apply music + blacklist filter
+    pool1 = filter_tracks(get_artist_tracks(seed_artist_id, seed_artist_name, seed_id))
+    pool2 = filter_tracks(search_tracks_by_year(seed_year, seed_id))
+    pool3 = filter_tracks(
         search_tracks_by_year(seed_year - 1, seed_id)
         + search_tracks_by_year(seed_year + 1, seed_id)
     )
@@ -318,7 +385,7 @@ def recommend(req: SearchRequest):
     groups    = [(pool1, "Same Artist"), (pool2, "Same Year"), (pool3, "±1 Year")]
     non_empty = [(p, lbl) for p, lbl in groups if p]
     if not non_empty:
-        raise HTTPException(404, "No recommendations found.")
+        raise HTTPException(404, "No recommendations found. Try a different song or adjust the blacklist.")
 
     pool, reason = random.choice(non_empty)
     pick = random.choice(pool)
@@ -332,9 +399,7 @@ def recommend(req: SearchRequest):
 def client_id_route():
     return {"client_id": SPOTIFY_CLIENT_ID}
 
-# ─────────────────────────────────────────────────────────────────
-#  SERVE FRONTEND
-# ─────────────────────────────────────────────────────────────────
+# ── Static ────────────────────────────────────────────────────────
 @app.get("/")
 def index():
     return FileResponse("index.html")

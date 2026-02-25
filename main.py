@@ -30,7 +30,6 @@ Features:
 - Only uses Feb-2026-safe Spotify API endpoints
 """
 
-
 # Must match exactly what's in Spotify Dashboard → App Settings → Redirect URIs
 REDIRECT_URI = "https://spotify-ai-dj.onrender.com/callback"
 
@@ -73,15 +72,25 @@ def get_cc_token() -> str:
     _cc["expires_at"] = time.time() + d["expires_in"]
     return _cc["value"]
 
-def sp_get(url: str, params: dict = None) -> dict:
-    r = requests.get(
-        url,
-        headers={"Authorization": f"Bearer {get_cc_token()}"},
-        params=params,
-        timeout=10,
-    )
-    r.raise_for_status()
-    return r.json()
+def sp_get(url: str, params: dict = None, retries: int = 3) -> dict:
+    """GET with automatic retry on transient connection errors."""
+    last_err = None
+    for attempt in range(retries):
+        try:
+            r = requests.get(
+                url,
+                headers={"Authorization": f"Bearer {get_cc_token()}"},
+                params=params,
+                timeout=12,
+            )
+            r.raise_for_status()
+            return r.json()
+        except (requests.HTTPError, requests.ConnectionError, requests.Timeout) as e:
+            last_err = e
+            if attempt < retries - 1:
+                time.sleep(0.4 * (attempt + 1))  # back-off: 0.4s, 0.8s
+            continue
+    raise last_err
 
 # ─────────────────────────────────────────────────────────────────
 #  PREVIEW URL SCRAPER
@@ -210,7 +219,9 @@ def search_track(song: str, artist: str) -> Optional[dict]:
 
 def search_tracks_by_year(year: int, exclude_id: str) -> list:
     results, seen = [], {exclude_id}
-    for term in random.sample(YEAR_SEED_TERMS, 4):
+    for i, term in enumerate(random.sample(YEAR_SEED_TERMS, 2)):
+        if i > 0:
+            time.sleep(0.15)  # brief pause between requests
         try:
             data = sp_get("https://api.spotify.com/v1/search", {
                 "q":     f"{term} year:{year}",
@@ -221,7 +232,7 @@ def search_tracks_by_year(year: int, exclude_id: str) -> list:
                 if t["id"] not in seen:
                     seen.add(t["id"])
                     results.append(t)
-        except requests.HTTPError:
+        except (requests.HTTPError, requests.ConnectionError, requests.Timeout):
             continue
     return results
 
@@ -241,7 +252,7 @@ def get_artist_tracks(artist_id: str, artist_name: str, exclude_id: str) -> list
                 if t["id"] not in seen:
                     seen.add(t["id"])
                     tracks.append(t)
-        except requests.HTTPError:
+        except (requests.HTTPError, requests.ConnectionError, requests.Timeout):
             break
     if len(tracks) < 30:
         try:
@@ -261,9 +272,9 @@ def get_artist_tracks(artist_id: str, artist_name: str, exclude_id: str) -> list
                             seen.add(t["id"])
                             t["album"] = album
                             tracks.append(t)
-                except requests.HTTPError:
+                except (requests.HTTPError, requests.ConnectionError, requests.Timeout):
                     continue
-        except requests.HTTPError:
+        except (requests.HTTPError, requests.ConnectionError, requests.Timeout):
             pass
     return tracks
 

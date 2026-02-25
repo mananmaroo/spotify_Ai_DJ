@@ -16,26 +16,32 @@ from urllib.parse import urlencode
 # -----------------------------
 SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
 SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
-
 """
-Spotify DJ – FastAPI backend
-Only uses endpoints confirmed working for new apps (post Nov 2024 / Feb 2026):
-  - GET  /search                         (search tracks/artists)
-  - GET  /artists/{id}/albums            (artist's albums)
-  - GET  /albums/{id}/tracks             (tracks inside an album)
-  - GET  /tracks/{id}                    (single track detail)
-  - POST /me/player/play                 (premium playback – user token)
+Spotify DJ – FastAPI backend (Feb 2026 compliant)
 
-Removed/deprecated endpoints we explicitly DO NOT call:
-  - GET /artists/{id}/top-tracks         (removed Feb 2026)
-  - GET /recommendations                 (removed Nov 2024)
-  - GET /audio-features                  (removed Nov 2024)
-  - GET /browse/new-releases             (removed Feb 2026)
+Only uses endpoints/fields confirmed working for Development Mode apps
+after the February 2026 Spotify API changes:
+
+  ALLOWED (and used here):
+  ✅ POST /api/token                      – client credentials + OAuth
+  ✅ GET  /search?q=...&type=track&limit≤10  – search (max 10 per request now)
+  ✅ GET  /artists/{id}/albums            – artist's albums list
+  ✅ GET  /albums/{id}/tracks             – tracks inside an album
+  ✅ GET  /me/player/play                 – premium playback (user token)
+
+  NOT USED (removed or restricted):
+  ❌ GET /artists/{id}/top-tracks         – removed Feb 2026
+  ❌ GET /recommendations                 – removed Nov 2024
+  ❌ GET /audio-features                  – removed Nov 2024
+  ❌ GET /browse/new-releases             – removed Feb 2026
+  ❌ search with limit > 10              – now 400s in Dev Mode
+  ❌ year: as sole query term             – 400s, must include a keyword too
+
+  REMOVED FIELDS we no longer read:
+  ❌ popularity, available_markets, external_ids, label, album_group
 """
 
-
-
-# ── Update this after first Render deploy ──────────────────────
+# ── Update this to your Render URL before deploying ──────────────
 # REDIRECT_URI = "https://your-app-name.onrender.com/callback"
 REDIRECT_URI = "http://localhost:8000/callback"
 
@@ -50,7 +56,7 @@ SCOPES = (
 app = FastAPI()
 
 # ─────────────────────────────────────────────────────────────────
-#  CLIENT-CREDENTIALS TOKEN  (for catalog/search calls only)
+#  CLIENT-CREDENTIALS TOKEN  (search & catalog only)
 # ─────────────────────────────────────────────────────────────────
 _cc: dict = {"value": None, "expires_at": 0}
 
@@ -73,7 +79,6 @@ def get_cc_token() -> str:
     return _cc["value"]
 
 def sp_get(url: str, params: dict = None) -> dict:
-    """Authenticated GET using client-credentials token."""
     r = requests.get(
         url,
         headers={"Authorization": f"Bearer {get_cc_token()}"},
@@ -84,7 +89,7 @@ def sp_get(url: str, params: dict = None) -> dict:
     return r.json()
 
 # ─────────────────────────────────────────────────────────────────
-#  OAUTH HELPERS  (user token for premium playback)
+#  OAUTH  (user token for Web Playback SDK)
 # ─────────────────────────────────────────────────────────────────
 def exchange_code(code: str) -> dict:
     creds = base64.b64encode(
@@ -126,89 +131,131 @@ def do_refresh(refresh_token: str) -> dict:
     return r.json()
 
 # ─────────────────────────────────────────────────────────────────
-#  CATALOG HELPERS  (only using allowed endpoints)
+#  CATALOG HELPERS
 # ─────────────────────────────────────────────────────────────────
 
 def search_track(song: str, artist: str) -> Optional[dict]:
-    """Search for a specific track. Uses /search – always allowed."""
+    """Find a specific track. /search with limit=1 — always works."""
     data = sp_get("https://api.spotify.com/v1/search", {
-        "q": f"track:{song} artist:{artist}",
-        "type": "track",
+        "q":     f"track:{song} artist:{artist}",
+        "type":  "track",
         "limit": 1,
     })
     items = data.get("tracks", {}).get("items", [])
     return items[0] if items else None
 
-def search_tracks_by_year(year: int, exclude_id: str, limit: int = 50) -> list:
-    """
-    Search for popular tracks from a given year.
-    Uses /search with year filter – allowed.
-    """
-    data = sp_get("https://api.spotify.com/v1/search", {
-        "q": f"year:{year}",
-        "type": "track",
-        "limit": limit,
-    })
-    return [
-        t for t in data.get("tracks", {}).get("items", [])
-        if t["id"] != exclude_id
-    ]
 
-def get_artist_tracks_via_albums(artist_id: str, exclude_id: str, max_tracks: int = 40) -> list:
+# Feb 2026: search limit is now max 10 per request in Dev Mode.
+# "year:" alone as the query term causes 400 Bad Request.
+# Fix: use the ARTIST NAME as the keyword + year: as filter,
+# then try a few different common search terms to get variety.
+YEAR_SEED_TERMS = [
+    "the", "love", "night", "feel", "time",
+    "new", "life", "way", "good", "day", "rock", "hiphop", "rap",
+]
+
+def search_tracks_by_year(year: int, exclude_id: str) -> list:
     """
-    Get tracks by an artist by:
-      1. GET /artists/{id}/albums  (allowed)
-      2. GET /albums/{id}/tracks   (allowed)
-    This replaces the removed /artists/{id}/top-tracks endpoint.
+    Search for tracks from a given year.
+    Uses a keyword + year: filter (bare year: alone = 400 in Dev Mode).
+    Runs multiple searches with different seed words to build a pool.
+    Limit capped at 10 per request (Feb 2026 restriction).
     """
-    # Step 1: fetch up to 10 albums (singles + albums give best track variety)
+    results = []
+    seen_ids = {exclude_id}
+    terms = random.sample(YEAR_SEED_TERMS, min(4, len(YEAR_SEED_TERMS)))
+    for term in terms:
+        try:
+            data = sp_get("https://api.spotify.com/v1/search", {
+                "q":     f"{term} year:{year}",
+                "type":  "track",
+                "limit": 10,   # max allowed in Dev Mode
+            })
+            for t in data.get("tracks", {}).get("items", []):
+                if t["id"] not in seen_ids:
+                    seen_ids.add(t["id"])
+                    results.append(t)
+        except requests.HTTPError:
+            continue  # skip if this particular combo fails
+    return results
+
+
+def get_artist_tracks_via_albums(
+    artist_id: str,
+    artist_name: str,
+    exclude_id: str,
+    max_tracks: int = 30,
+) -> list:
+    """
+    Fetch tracks by an artist using the still-available endpoints:
+      GET /artists/{id}/albums  → GET /albums/{id}/tracks
+    Replaces the removed GET /artists/{id}/top-tracks.
+
+    Strategy: search for 'artist:{name}' across multiple pages to get
+    a diverse track list, supplemented by album track crawling.
+    """
+    tracks = []
+    seen_ids = {exclude_id}
+
+    # --- Strategy A: search "artist:{name}" (fast, good variety) ---
+    for offset in [0, 10]:
+        if len(tracks) >= max_tracks:
+            break
+        try:
+            data = sp_get("https://api.spotify.com/v1/search", {
+                "q":      f"artist:{artist_name}",
+                "type":   "track",
+                "limit":  10,
+                "offset": offset,
+            })
+            for t in data.get("tracks", {}).get("items", []):
+                if t["id"] not in seen_ids:
+                    seen_ids.add(t["id"])
+                    tracks.append(t)
+        except requests.HTTPError:
+            break
+
+    if len(tracks) >= max_tracks:
+        return tracks[:max_tracks]
+
+    # --- Strategy B: albums → tracks (deeper crawl as fallback) ---
     try:
         albums_data = sp_get(
             f"https://api.spotify.com/v1/artists/{artist_id}/albums",
             {
                 "include_groups": "album,single",
-                "limit": 10,
-                "market": "US",
+                "limit":          10,
+                "market":         "US",
             },
         )
-    except Exception:
-        return []
+    except requests.HTTPError:
+        return tracks[:max_tracks]
 
-    albums = albums_data.get("items", [])
-    if not albums:
-        return []
-
-    # Step 2: for each album fetch its tracks (stop once we have enough)
-    tracks = []
-    for album in albums:
+    for album in albums_data.get("items", []):
         if len(tracks) >= max_tracks:
             break
-        album_id = album["id"]
         try:
-            tracks_data = sp_get(
-                f"https://api.spotify.com/v1/albums/{album_id}/tracks",
+            album_tracks = sp_get(
+                f"https://api.spotify.com/v1/albums/{album['id']}/tracks",
                 {"limit": 10, "market": "US"},
             )
-        except Exception:
+        except requests.HTTPError:
             continue
-
-        for t in tracks_data.get("items", []):
-            if t["id"] == exclude_id:
-                continue
-            # Album tracks endpoint returns simplified track objects;
-            # we need to add album info manually so fmt() works
-            t["album"] = album
-            tracks.append(t)
+        for t in album_tracks.get("items", []):
+            if t["id"] not in seen_ids:
+                seen_ids.add(t["id"])
+                t["album"] = album   # inject album info (simplified tracks lack it)
+                tracks.append(t)
             if len(tracks) >= max_tracks:
                 break
 
-    return tracks
+    return tracks[:max_tracks]
+
 
 def fmt(t: dict) -> dict:
-    """Normalise a track object into a consistent dict for the frontend."""
+    """Normalise any track object for the frontend."""
     album  = t.get("album", {})
     images = album.get("images", [])
-    # release_date can be "2021", "2021-03", or "2021-03-19"
     release = album.get("release_date", "")
     year = release[:4] if release else "?"
     return {
@@ -235,7 +282,7 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 # ─────────────────────────────────────────────────────────────────
-#  API ROUTES
+#  ROUTES
 # ─────────────────────────────────────────────────────────────────
 
 @app.get("/login")
@@ -261,7 +308,6 @@ def callback(code: str = Query(None), error: str = Query(None)):
         at  = tokens["access_token"]
         rt  = tokens.get("refresh_token", "")
         exp = tokens.get("expires_in", 3600)
-        # Pass tokens in URL fragment — never logged by server
         return RedirectResponse(f"/#at={at}&rt={rt}&exp={exp}")
     except Exception:
         return RedirectResponse("/?auth_error=token_exchange_failed")
@@ -280,25 +326,29 @@ def api_refresh(req: RefreshRequest):
 
 @app.post("/api/recommend")
 def recommend(req: SearchRequest):
-    # 1. Find the seed track
+    # 1. Find seed track
     seed = search_track(req.song.strip(), req.artist.strip())
     if not seed:
         raise HTTPException(
-            404, f"Could not find '{req.song}' by '{req.artist}' on Spotify."
+            404,
+            f"Could not find '{req.song}' by '{req.artist}' on Spotify.",
         )
 
-    seed_year = int(seed["album"]["release_date"][:4])
-    seed_aid  = seed["artists"][0]["id"]
-    seed_id   = seed["id"]
+    seed_year        = int(seed["album"]["release_date"][:4])
+    seed_artist_id   = seed["artists"][0]["id"]
+    seed_artist_name = seed["artists"][0]["name"]
+    seed_id          = seed["id"]
 
-    # 2. Build pools using ONLY allowed endpoints
-    # Pool 1: Same artist  → via albums → tracks  (replaces removed top-tracks)
-    pool1 = get_artist_tracks_via_albums(seed_aid, seed_id)
+    # 2. Build pools — all using Feb-2026-safe endpoints
+    # Pool 1: Same artist  (search + album crawl)
+    pool1 = get_artist_tracks_via_albums(
+        seed_artist_id, seed_artist_name, seed_id
+    )
 
-    # Pool 2: Same year    → search with year filter
+    # Pool 2: Same year  (keyword + year: filter, multiple queries)
     pool2 = search_tracks_by_year(seed_year, seed_id)
 
-    # Pool 3: ±1 year      → search year-1 + year+1
+    # Pool 3: ±1 year
     pool3 = (
         search_tracks_by_year(seed_year - 1, seed_id)
         + search_tracks_by_year(seed_year + 1, seed_id)
@@ -308,7 +358,9 @@ def recommend(req: SearchRequest):
     non_empty = [(p, lbl) for p, lbl in groups if p]
 
     if not non_empty:
-        raise HTTPException(404, "No recommendations found. Try a different song.")
+        raise HTTPException(
+            404, "No recommendations found. Try a different song."
+        )
 
     pool, reason = random.choice(non_empty)
     pick = random.choice(pool)
@@ -323,15 +375,15 @@ def client_id_route():
     return {"client_id": SPOTIFY_CLIENT_ID}
 
 # ─────────────────────────────────────────────────────────────────
-#  SERVE FRONTEND  (index.html at root)
+#  SERVE FRONTEND
 # ─────────────────────────────────────────────────────────────────
 @app.get("/")
 def index():
     return FileResponse("index.html")
 
+# Catch-all: serve index.html for all non-API routes (SPA behaviour)
 @app.get("/{full_path:path}")
 def catch_all(full_path: str):
-    # Don't intercept API routes
-    if full_path.startswith("api/") or full_path in ("login", "callback"):
+    if full_path.startswith(("api/", "login", "callback")):
         raise HTTPException(404)
     return FileResponse("index.html")

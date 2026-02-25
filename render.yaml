@@ -1,38 +1,9 @@
 services:
   - type: web
-    name: ai-dj-api
-    runtime: python
-    pythonVersion: 3.10
-    buildCommand: |
-      pip install --upgrade pip
-      pip install -e .
-    startCommand: uvicorn ai_year_wise_dj.api:app --host 0.0.0.0 --port $PORT
+    name: spotify-dj
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: SPOTIPY_CLIENT_ID
-        sync: false
-      - key: SPOTIPY_CLIENT_SECRET
-        sync: false
       - key: PORT
-        value: "8000"
-
-  - type: worker
-    name: ai-dj-worker
-    runtime: python
-    pythonVersion: 3.10
-    buildCommand: |
-      pip install --upgrade pip
-      pip install -e .
-    startCommand: python -m ai_year_wise_dj.app --seed-query "${START_TRACK_QUERY}"
-    envVars:
-      - key: SPOTIPY_CLIENT_ID
-        sync: false
-      - key: SPOTIPY_CLIENT_SECRET
-        sync: false
-      - key: START_TRACK_QUERY
-        sync: false
-      - key: TARGET_YEAR
-        sync: false
-      - key: YEAR_WINDOW
-        sync: false
-      - key: TRACK_LIMIT
-        sync: false
+        value: 10000

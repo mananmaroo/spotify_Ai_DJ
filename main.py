@@ -33,7 +33,6 @@ With 10-min cache: 0-2 depending on history
 Rate limiting: threading.Lock serialises all calls + 429 Retry-After respected
 """
 
-
 REDIRECT_URI          = "https://spotify-ai-dj.onrender.com/callback"
 SCOPES = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state"
 
@@ -197,25 +196,44 @@ YEAR_TERMS = ["love", "night", "feel", "time", "new", "life", "way", "good", "ba
 
 def find_seed(song: str, artist: str) -> Optional[dict]:
     """
-    Try queries from most to least permissive.
-    Plain 'song artist' works for virtually everything on Spotify.
+    Find seed track with progressively looser queries.
+    Raises HTTPException on API errors so the real cause surfaces to the user.
+    Returns None only when the track genuinely doesn't exist on Spotify.
     """
-    for q in [f"{song} {artist}", song]:
+    queries = [
+        f"{song} {artist}",   # plain — works for 99% of real songs
+        f"{song}",             # song only — handles misspelled artist
+    ]
+    last_exc = None
+    for q in queries:
         try:
-            d = sp_get("https://api.spotify.com/v1/search",
-                       {"q": q, "type": "track", "limit": 5})
+            d = sp_get("https://api.spotify.com/v1/search", {
+                "q": q, "type": "track", "limit": 10, "market": "US",
+            })
             items = d.get("tracks", {}).get("items", [])
             if not items:
                 continue
-            # Prefer item whose artist name matches
             al = artist.lower()
+            # 1. Exact artist match
+            for item in items:
+                if any(a["name"].lower() == al for a in item.get("artists", [])):
+                    return item
+            # 2. Partial artist match
             for item in items:
                 if any(al in a["name"].lower() or a["name"].lower() in al
                        for a in item.get("artists", [])):
                     return item
-            return items[0]
-        except Exception:
+            # 3. First result (song name only query)
+            if q == song:
+                return items[0]
+        except HTTPException:
+            raise   # surface 429 / 502 / 503 properly
+        except Exception as e:
+            last_exc = e
             continue
+
+    if last_exc:
+        raise HTTPException(503, f"Spotify search failed: {last_exc}")
     return None
 
 def artist_pool(artist_name: str, exclude_id: str) -> list:
@@ -346,7 +364,8 @@ def recommend(req: SearchRequest):
     seed = find_seed(req.song.strip(), req.artist.strip())
     if not seed:
         raise HTTPException(404,
-            f"Couldn't find '{req.song}' by '{req.artist}'. Check the spelling and try again.")
+            f"Couldn't find '{req.song}' by '{req.artist}' on Spotify. "
+            "Try the exact song name as it appears on Spotify (e.g. 'Shape of You' by 'Ed Sheeran').")
 
     seed_id   = seed["id"]
     seed_year = int(seed["album"]["release_date"][:4])

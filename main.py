@@ -19,55 +19,57 @@ SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
 SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
 
 """
-Spotify DJ – FastAPI backend (lean version)
-
-Flow per /api/recommend:
-  1. Find seed track — plain fuzzy query "song artist", fallback to song-only
-  2. Pick one bucket type at random (artist OR year)
-  3. Fire exactly that ONE search call
-  4. Return result
-
-Total Spotify API calls per request: 2 maximum (seed + 1 pool)
-With 10-min cache: 0-2 depending on history
-
-Rate limiting: threading.Lock serialises all calls + 429 Retry-After respected
+Spotify DJ – FastAPI backend
+- Fuzzy "song artist" search (no strict field syntax)
+- 2 Spotify calls per recommendation: seed + one random pool
+- Threading lock + 429 Retry-After + 10-min TTL cache
 """
 
+
 REDIRECT_URI          = "https://spotify-ai-dj.onrender.com/callback"
-SCOPES = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state"
+SCOPES = (
+    "streaming user-read-email user-read-private "
+    "user-read-playback-state user-modify-playback-state"
+)
 
 app = FastAPI()
 
-# ─────────────────────────────────────────────────────────────────
-#  IN-MEMORY STATE
-# ─────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
+#  STATE
+# ──────────────────────────────────────────────
 _blacklist:  set = set()
 _view_count: int = 0
 
-# ─────────────────────────────────────────────────────────────────
-#  RATE LIMIT & CACHE
-# ─────────────────────────────────────────────────────────────────
-_api_lock         = threading.Lock()
-_rate_limit_until = 0.0
-_cache: dict      = {}
-CACHE_TTL         = 600   # 10 min
+# ──────────────────────────────────────────────
+#  CACHE
+# ──────────────────────────────────────────────
+_cache: dict = {}
+CACHE_TTL    = 600  # 10 min
 
-def _cache_get(key):
-    e = _cache.get(key)
+def _cget(k):
+    e = _cache.get(k)
     return e[0] if e and time.time() < e[1] else None
 
-def _cache_set(key, val):
-    _cache[key] = (val, time.time() + CACHE_TTL)
+def _cset(k, v):
+    _cache[k] = (v, time.time() + CACHE_TTL)
 
-# ─────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
+#  RATE LIMIT
+# ──────────────────────────────────────────────
+_lock       = threading.Lock()
+_hold_until = 0.0
+
+# ──────────────────────────────────────────────
 #  CLIENT CREDENTIALS TOKEN
-# ─────────────────────────────────────────────────────────────────
-_cc = {"value": None, "expires_at": 0}
+# ──────────────────────────────────────────────
+_cc = {"tok": None, "exp": 0}
 
-def _get_token() -> str:
-    if _cc["value"] and time.time() < _cc["expires_at"] - 60:
-        return _cc["value"]
-    creds = base64.b64encode(f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()).decode()
+def _token() -> str:
+    if _cc["tok"] and time.time() < _cc["exp"] - 60:
+        return _cc["tok"]
+    creds = base64.b64encode(
+        f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()
+    ).decode()
     r = requests.post(
         "https://accounts.spotify.com/api/token",
         headers={"Authorization": f"Basic {creds}"},
@@ -76,72 +78,66 @@ def _get_token() -> str:
     )
     r.raise_for_status()
     d = r.json()
-    _cc["value"] = d["access_token"]
-    _cc["expires_at"] = time.time() + d["expires_in"]
-    return _cc["value"]
+    _cc["tok"] = d["access_token"]
+    _cc["exp"] = time.time() + d["expires_in"]
+    return _cc["tok"]
 
-# ─────────────────────────────────────────────────────────────────
-#  CORE GET — serialised, cached, 429-aware
-# ─────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
+#  SPOTIFY GET — lock + cache + 429 backoff
+# ──────────────────────────────────────────────
 def sp_get(url: str, params: dict = None) -> dict:
-    global _rate_limit_until
+    global _hold_until
     key = url + str(sorted((params or {}).items()))
-
-    hit = _cache_get(key)
+    hit = _cget(key)
     if hit is not None:
         return hit
 
-    with _api_lock:
-        hit = _cache_get(key)
+    with _lock:
+        hit = _cget(key)
         if hit is not None:
             return hit
 
         for attempt in range(4):
-            # honour global rate-limit cooldown
-            gap = _rate_limit_until - time.time()
+            gap = _hold_until - time.time()
             if gap > 0:
-                time.sleep(gap + 0.05)
-
+                time.sleep(gap + 0.1)
             try:
                 r = requests.get(
                     url,
-                    headers={"Authorization": f"Bearer {_get_token()}"},
+                    headers={"Authorization": f"Bearer {_token()}"},
                     params=params,
                     timeout=15,
                 )
-
                 if r.status_code == 429:
                     wait = min(int(r.headers.get("Retry-After", "10")), 60)
-                    _rate_limit_until = time.time() + wait
+                    _hold_until = time.time() + wait
                     time.sleep(wait)
                     continue
-
                 r.raise_for_status()
                 data = r.json()
-                _cache_set(key, data)
+                _cset(key, data)
                 return data
-
             except requests.HTTPError as e:
                 if attempt < 3:
                     time.sleep(1)
                     continue
-                raise HTTPException(502, f"Spotify error: {e}")
+                raise HTTPException(502, f"Spotify API error: {e}")
             except (requests.ConnectionError, requests.Timeout) as e:
                 if attempt < 3:
                     time.sleep(2 * (attempt + 1))
                     continue
                 raise HTTPException(503, f"Cannot reach Spotify: {e}")
 
-        raise HTTPException(429, "Rate limited — please try again shortly.")
+        raise HTTPException(429, "Rate limited — please try again in a moment.")
 
-# ─────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
 #  PREVIEW URL SCRAPER
-# ─────────────────────────────────────────────────────────────────
-_preview_cache: dict = {}
+# ──────────────────────────────────────────────
+_pcache: dict = {}
 
-def get_preview_url(track_id: str) -> Optional[str]:
-    if track_id in _preview_cache:
-        return _preview_cache[track_id]
+def get_preview(track_id: str) -> Optional[str]:
+    if track_id in _pcache:
+        return _pcache[track_id]
     try:
         r = requests.get(
             f"https://open.spotify.com/embed/track/{track_id}",
@@ -154,58 +150,66 @@ def get_preview_url(track_id: str) -> Optional[str]:
         url = m.group(1) if m else None
     except Exception:
         url = None
-    _preview_cache[track_id] = url
+    _pcache[track_id] = url
     return url
 
-# ─────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
 #  FILTERS
-# ─────────────────────────────────────────────────────────────────
-MUSIC_ALBUM_TYPES = {"album", "single", "compilation"}
+# ──────────────────────────────────────────────
+_GOOD_TYPES = {"album", "single", "compilation"}
 
-def _is_music(t: dict) -> bool:
-    if t.get("type", "track") != "track":
+def _keep(t: dict) -> bool:
+    if t.get("type") != "track":
         return False
-    return t.get("album", {}).get("album_type", "album").lower() in MUSIC_ALBUM_TYPES
+    if t.get("album", {}).get("album_type", "").lower() not in _GOOD_TYPES:
+        return False
+    for a in t.get("artists", []):
+        if a.get("name", "").lower() in _blacklist:
+            return False
+    return True
 
-def _is_blacklisted(t: dict) -> bool:
-    return any(a.get("name", "").lower() in _blacklist for a in t.get("artists", []))
-
-def clean(tracks: list) -> list:
-    return [t for t in tracks if _is_music(t) and not _is_blacklisted(t)]
-
-# ─────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
 #  OAUTH
-# ─────────────────────────────────────────────────────────────────
-def _post_token(data: dict) -> dict:
-    creds = base64.b64encode(f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()).decode()
+# ──────────────────────────────────────────────
+def _post_tok(data: dict) -> dict:
+    creds = base64.b64encode(
+        f"{SPOTIFY_CLIENT_ID}:{SPOTIFY_CLIENT_SECRET}".encode()
+    ).decode()
     r = requests.post(
         "https://accounts.spotify.com/api/token",
-        headers={"Authorization": f"Basic {creds}", "Content-Type": "application/x-www-form-urlencoded"},
+        headers={
+            "Authorization": f"Basic {creds}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
         data=data, timeout=15,
     )
     r.raise_for_status()
     return r.json()
 
-def exchange_code(code):  return _post_token({"grant_type": "authorization_code", "code": code, "redirect_uri": REDIRECT_URI})
-def do_refresh(rt):       return _post_token({"grant_type": "refresh_token", "refresh_token": rt})
+def exchange_code(code: str) -> dict:
+    return _post_tok({
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": REDIRECT_URI,
+    })
 
-# ─────────────────────────────────────────────────────────────────
-#  SEARCH HELPERS
-# ─────────────────────────────────────────────────────────────────
-YEAR_TERMS = ["love", "night", "feel", "time", "new", "life", "way", "good", "back", "like"]
+def do_refresh(rt: str) -> dict:
+    return _post_tok({
+        "grant_type": "refresh_token",
+        "refresh_token": rt,
+    })
+
+# ──────────────────────────────────────────────
+#  SEARCH
+# ──────────────────────────────────────────────
+YEAR_TERMS = ["love", "night", "feel", "time", "new", "life", "back", "good"]
 
 def find_seed(song: str, artist: str) -> Optional[dict]:
     """
-    Find seed track with progressively looser queries.
-    Raises HTTPException on API errors so the real cause surfaces to the user.
-    Returns None only when the track genuinely doesn't exist on Spotify.
+    Plain text queries only — no Spotify field syntax.
+    "Shape of You ed sheeran" works; "track:Shape of You artist:ed sheeran" often doesn't.
     """
-    queries = [
-        f"{song} {artist}",   # plain — works for 99% of real songs
-        f"{song}",             # song only — handles misspelled artist
-    ]
-    last_exc = None
-    for q in queries:
+    for q in [f"{song} {artist}", song]:
         try:
             d = sp_get("https://api.spotify.com/v1/search", {
                 "q": q, "type": "track", "limit": 10, "market": "US",
@@ -214,42 +218,42 @@ def find_seed(song: str, artist: str) -> Optional[dict]:
             if not items:
                 continue
             al = artist.lower()
-            # 1. Exact artist match
+            # 1. exact artist name
             for item in items:
                 if any(a["name"].lower() == al for a in item.get("artists", [])):
                     return item
-            # 2. Partial artist match
+            # 2. partial artist name ("ed sheeran" ↔ "Ed Sheeran")
             for item in items:
                 if any(al in a["name"].lower() or a["name"].lower() in al
                        for a in item.get("artists", [])):
                     return item
-            # 3. First result (song name only query)
+            # 3. song-only query: take first result
             if q == song:
                 return items[0]
         except HTTPException:
-            raise   # surface 429 / 502 / 503 properly
-        except Exception as e:
-            last_exc = e
+            raise  # surface real errors (429, 503, etc.)
+        except Exception:
             continue
-
-    if last_exc:
-        raise HTTPException(503, f"Spotify search failed: {last_exc}")
     return None
 
-def artist_pool(artist_name: str, exclude_id: str) -> list:
+def artist_pool(name: str, exclude: str) -> list:
     try:
-        d = sp_get("https://api.spotify.com/v1/search",
-                   {"q": artist_name, "type": "track", "limit": 10})
-        return clean([t for t in d.get("tracks", {}).get("items", []) if t["id"] != exclude_id])
+        d = sp_get("https://api.spotify.com/v1/search", {
+            "q": name, "type": "track", "limit": 10, "market": "US",
+        })
+        return [t for t in d.get("tracks", {}).get("items", [])
+                if t["id"] != exclude and _keep(t)]
     except Exception:
         return []
 
-def year_pool(year: int, exclude_id: str) -> list:
-    term = random.choice(YEAR_TERMS)
+def year_pool(year: int, exclude: str) -> list:
     try:
-        d = sp_get("https://api.spotify.com/v1/search",
-                   {"q": f"{term} year:{year}", "type": "track", "limit": 10})
-        return clean([t for t in d.get("tracks", {}).get("items", []) if t["id"] != exclude_id])
+        d = sp_get("https://api.spotify.com/v1/search", {
+            "q": f"{random.choice(YEAR_TERMS)} year:{year}",
+            "type": "track", "limit": 10, "market": "US",
+        })
+        return [t for t in d.get("tracks", {}).get("items", [])
+                if t["id"] != exclude and _keep(t)]
     except Exception:
         return []
 
@@ -264,49 +268,41 @@ def fmt(t: dict) -> dict:
         "artist":      ", ".join(a["name"] for a in t.get("artists", [])),
         "album":       album.get("name", ""),
         "year":        release[:4] if release else "?",
-        "preview_url": get_preview_url(t["id"]),
+        "preview_url": get_preview(t["id"]),
         "spotify_url": t.get("external_urls", {}).get("spotify", ""),
         "image":       images[0]["url"] if images else "",
         "duration_ms": t.get("duration_ms", 0),
         "popularity":  t.get("popularity", 0),
     }
 
-# ─────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
 #  MODELS
-# ─────────────────────────────────────────────────────────────────
-def popularity_filter(tracks: list, mode: str) -> list:
-    """No extra API calls — popularity is already in the track objects."""
-    if mode == "popular":
-        hi = [t for t in tracks if t.get("popularity", 0) >= 60]
-        return hi or tracks          # fallback to full pool if none qualify
-    if mode == "underground":
-        lo = [t for t in tracks if t.get("popularity", 0) < 40]
-        return lo or tracks
-    # balanced (default) — prefer 30-70, fall back to all
-    mid = [t for t in tracks if 30 <= t.get("popularity", 50) <= 70]
-    return mid or tracks
-
-class SearchRequest(BaseModel):
-    song:       str
-    artist:     str
-    popularity: str = "balanced"   # popular | balanced | underground
-
-class RefreshRequest(BaseModel):
-    refresh_token: str
-
-class BlacklistAddRequest(BaseModel):
+# ──────────────────────────────────────────────
+class SearchReq(BaseModel):
+    song:   str
     artist: str
 
-# ─────────────────────────────────────────────────────────────────
-#  AUTH ROUTES
-# ─────────────────────────────────────────────────────────────────
+class RefreshReq(BaseModel):
+    refresh_token: str
+
+class BLReq(BaseModel):
+    artist: str
+
+# ──────────────────────────────────────────────
+#  ROUTES — auth
+# ──────────────────────────────────────────────
 @app.get("/login")
 def login():
-    return RedirectResponse("https://accounts.spotify.com/authorize?" + urlencode({
-        "response_type": "code", "client_id": SPOTIFY_CLIENT_ID,
-        "scope": SCOPES, "redirect_uri": REDIRECT_URI,
-        "state": secrets.token_urlsafe(16), "show_dialog": "false",
-    }))
+    return RedirectResponse(
+        "https://accounts.spotify.com/authorize?" + urlencode({
+            "response_type": "code",
+            "client_id":     SPOTIFY_CLIENT_ID,
+            "scope":         SCOPES,
+            "redirect_uri":  REDIRECT_URI,
+            "state":         secrets.token_urlsafe(16),
+            "show_dialog":   "false",
+        })
+    )
 
 @app.get("/callback")
 def callback(code: str = Query(None), error: str = Query(None)):
@@ -314,97 +310,112 @@ def callback(code: str = Query(None), error: str = Query(None)):
         return RedirectResponse(f"/?auth_error={error or 'no_code'}")
     try:
         tok = exchange_code(code)
-        return RedirectResponse(f"/#at={tok['access_token']}&rt={tok.get('refresh_token','')}&exp={tok.get('expires_in',3600)}")
+        return RedirectResponse(
+            f"/#at={tok['access_token']}"
+            f"&rt={tok.get('refresh_token', '')}"
+            f"&exp={tok.get('expires_in', 3600)}"
+        )
     except Exception:
         return RedirectResponse("/?auth_error=token_exchange_failed")
 
 @app.post("/api/refresh")
-def api_refresh(req: RefreshRequest):
+def api_refresh(req: RefreshReq):
     try:
         d = do_refresh(req.refresh_token)
-        return {"access_token": d["access_token"], "expires_in": d.get("expires_in", 3600),
-                "refresh_token": d.get("refresh_token", req.refresh_token)}
+        return {
+            "access_token":  d["access_token"],
+            "expires_in":    d.get("expires_in", 3600),
+            "refresh_token": d.get("refresh_token", req.refresh_token),
+        }
     except Exception:
         raise HTTPException(401, "Token refresh failed.")
 
-# ─────────────────────────────────────────────────────────────────
-#  BLACKLIST ROUTES
-# ─────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
+#  ROUTES — blacklist
+# ──────────────────────────────────────────────
 @app.get("/api/blacklist")
-def get_blacklist():   return {"blacklist": sorted(_blacklist)}
+def get_bl():
+    return {"blacklist": sorted(_blacklist)}
 
 @app.post("/api/blacklist")
-def add_blacklist(req: BlacklistAddRequest):
+def add_bl(req: BLReq):
     n = req.artist.strip()
-    if not n: raise HTTPException(400, "Empty name.")
+    if not n:
+        raise HTTPException(400, "Empty name.")
     _blacklist.add(n.lower())
-    return {"blacklist": sorted(_blacklist), "added": n}
+    return {"blacklist": sorted(_blacklist)}
 
 @app.delete("/api/blacklist")
-def del_blacklist(artist: str = Query(...)):
+def del_bl(artist: str = Query(...)):
     _blacklist.discard(artist.strip().lower())
     return {"blacklist": sorted(_blacklist)}
 
-# ─────────────────────────────────────────────────────────────────
-#  VIEWS
-# ─────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
+#  ROUTES — views
+# ──────────────────────────────────────────────
 @app.get("/api/views")
-def get_views():  return {"views": _view_count}
+def get_views():
+    return {"views": _view_count}
 
 @app.post("/api/views/increment")
 def inc_views():
-    global _view_count; _view_count += 1; return {"views": _view_count}
+    global _view_count
+    _view_count += 1
+    return {"views": _view_count}
 
-# ─────────────────────────────────────────────────────────────────
-#  RECOMMEND  — 2 Spotify calls max, bucket chosen before any call
-# ─────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
+#  ROUTES — recommend
+#  Max 2 Spotify calls: seed lookup + one pool
+# ──────────────────────────────────────────────
 @app.post("/api/recommend")
-def recommend(req: SearchRequest):
-    # 1. Find seed (1 call, cached after first time)
+def recommend(req: SearchReq):
+    # 1. Find seed
     seed = find_seed(req.song.strip(), req.artist.strip())
     if not seed:
-        raise HTTPException(404,
+        raise HTTPException(
+            404,
             f"Couldn't find '{req.song}' by '{req.artist}' on Spotify. "
-            "Try the exact song name as it appears on Spotify (e.g. 'Shape of You' by 'Ed Sheeran').")
+            "Check spelling — use the song name exactly as it appears on Spotify."
+        )
 
     seed_id   = seed["id"]
     seed_year = int(seed["album"]["release_date"][:4])
     artist_nm = seed["artists"][0]["name"]
 
-    # 2. Choose bucket type randomly — NO API calls yet
-    bucket = random.choice(["artist", "artist", "year"])  # artist weighted 2:1
-
-    # 3. Fetch ONLY that bucket (1 call, cached)
-    if bucket == "artist":
+    # 2. Pick bucket FIRST (no API call), then fetch only that one
+    use_artist = random.random() < 0.6   # 60% same artist, 40% same year
+    if use_artist:
         pool   = artist_pool(artist_nm, seed_id)
         reason = "Same Artist"
+        if not pool:  # fallback
+            pool   = year_pool(seed_year, seed_id)
+            reason = "Same Year"
     else:
         pool   = year_pool(seed_year, seed_id)
         reason = "Same Year"
-
-    # 4. Fallback: if chosen bucket empty, try the other
-    if not pool:
-        if bucket == "artist":
-            pool = year_pool(seed_year, seed_id); reason = "Same Year"
-        else:
-            pool = artist_pool(artist_nm, seed_id); reason = "Same Artist"
+        if not pool:  # fallback
+            pool   = artist_pool(artist_nm, seed_id)
+            reason = "Same Artist"
 
     if not pool:
         raise HTTPException(404, "No recommendations found. Try a different song.")
 
-    pick = random.choice(popularity_filter(pool, req.popularity))
+    pick = random.choice(pool)
     return {
         "seed":           fmt(seed),
         "recommendation": {**fmt(pick), "match_reason": reason},
     }
 
-# ─────────────────────────────────────────────────────────────────
-#  STATIC
-# ─────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────
+#  STATIC  — must come LAST
+# ──────────────────────────────────────────────
 @app.get("/")
-def index():  return FileResponse("index.html")
+def index():
+    return FileResponse("index.html")
 
-@app.get("/{full_path:path}")
-def catch_all(full_path: str):
-    if full_path.startswith(("api/", "login", "callback")): raise HTTPException(404)
+@app.get("/{path:path}")
+def static(path: str):
+    # Only serve index for non-API paths
+    if path.startswith("api/") or path in ("login", "callback"):
+        raise HTTPException(404)
     return FileResponse("index.html")

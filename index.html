@@ -265,13 +265,7 @@ footer{margin-top:32px;text-align:center;font-size:10px;color:#1a1a1a}
 .seed-cancel:hover{border-color:var(--r);color:var(--r)}
 @media(max-width:540px){.seed-edit-row{grid-template-columns:1fr 1fr;}.seed-edit-row .seed-apply,.seed-edit-row .seed-cancel{grid-column:span 2}}
 
-/* POPULARITY */
-.pop-panel{padding:13px 16px}
-.pop-btns{display:flex;gap:7px;flex-wrap:wrap}
-.pop-btn{padding:6px 16px;border-radius:20px;border:1px solid var(--b);background:none;
-  color:var(--mu);font-size:12px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px}
-.pop-btn:hover{border-color:var(--g);color:var(--tx)}
-.pop-btn.sel{background:var(--g);border-color:var(--g);color:#000;font-weight:600}
+
 </style>
 </head>
 <body>
@@ -292,16 +286,6 @@ footer{margin-top:32px;text-align:center;font-size:10px;color:#1a1a1a}
   </button>
 </div>
 <div class="warn" id="pw">⚠️ Web Playback SDK needs <strong>Spotify Premium</strong>. Without it the mix uses 30s previews — still fully automatic.</div>
-
-<!-- POPULARITY -->
-<div class="panel pop-panel">
-  <div class="sec-lbl">🔥 Song Popularity <span class="active-chip" id="pop-chip">Balanced</span></div>
-  <div class="pop-btns">
-    <button class="pop-btn" data-p="popular"     onclick="setPop(this)">🌟 Popular</button>
-    <button class="pop-btn sel" data-p="balanced" onclick="setPop(this)">⚖️ Balanced</button>
-    <button class="pop-btn" data-p="underground" onclick="setPop(this)">💎 Underground</button>
-  </div>
-</div>
 
 <!-- MIX POINT -->
 <div class="panel" style="padding:13px 16px">
@@ -439,7 +423,6 @@ let AT=null, RT=null, exp=0;            // auth
 let sdk=null, devId=null, sdkOK=false;  // spotify sdk
 let vol=0.8;
 let mf=0.5;
-let popPref='balanced';                // popular | balanced | underground
 let running=false, paused=false;
 let mixFired=false, inXF=false;
 let xfTimer=null, tickTimer=null;
@@ -455,14 +438,6 @@ const isSDK=()=>sdkOK&&!!AT;
 // ══════════════════════════════════════════════════
 //  MIX POINT
 // ══════════════════════════════════════════════════
-function setPop(btn){
-  document.querySelectorAll('.pop-btn').forEach(b=>b.classList.remove('sel'));
-  btn.classList.add('sel');
-  popPref=btn.dataset.p;
-  const labels={'popular':'Popular','balanced':'Balanced','underground':'Underground'};
-  $('pop-chip').textContent=labels[popPref]||popPref;
-}
-
 function setMP(btn){
   document.querySelectorAll('.mp-btn').forEach(b=>b.classList.remove('sel'));
   btn.classList.add('sel');
@@ -541,7 +516,7 @@ function setVol(v){vol=v/100;if(isSDK())sdkVol(vol);if(nowA)nowA.volume=vol;}
 //  API
 // ══════════════════════════════════════════════════
 async function getRec(song,art){
-  const r=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({song,artist:art,popularity:popPref})});
+  const r=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({song,artist:art})});
   if(!r.ok){const e=await r.json().catch(()=>({detail:'Error'}));throw new Error(e.detail||'Request failed');}
   return r.json();
 }

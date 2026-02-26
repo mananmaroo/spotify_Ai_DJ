@@ -17,6 +17,7 @@ from urllib.parse import urlencode
 # -----------------------------
 SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
 SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
+
 """
 Spotify DJ – FastAPI backend
 
@@ -34,6 +35,7 @@ Other features:
   - Genre-switch toggle
   - View counter (in-memory)
 """
+
 
 REDIRECT_URI          = "https://spotify-ai-dj.onrender.com/callback"
 
@@ -260,15 +262,33 @@ YEAR_TERMS = ["the", "love", "night", "feel", "time", "new", "life", "way"]
 
 
 def search_track(song: str, artist: str) -> Optional[dict]:
-    """1 API call — find the seed track."""
-    try:
-        d = sp_get("https://api.spotify.com/v1/search", {
-            "q": f"track:{song} artist:{artist}", "type": "track", "limit": 1,
-        })
-        items = d.get("tracks", {}).get("items", [])
-        return items[0] if items else None
-    except Exception:
-        return None
+    """
+    Find seed track. Tries progressively looser queries so real songs
+    like 'The Hills' by 'The Weeknd' are always found.
+    """
+    queries = [
+        f"{song} {artist}",                   # plain: most permissive, works best
+        f"track:{song} artist:{artist}",       # strict field syntax fallback
+        song,                                  # song name only if artist spelling is off
+    ]
+    for q in queries:
+        try:
+            d = sp_get("https://api.spotify.com/v1/search", {
+                "q": q, "type": "track", "limit": 5,
+            })
+            items = d.get("tracks", {}).get("items", [])
+            if not items:
+                continue
+            # Pick best match: prefer exact artist name match, else first result
+            artist_lower = artist.lower()
+            for item in items:
+                names = [a["name"].lower() for a in item.get("artists", [])]
+                if any(artist_lower in n or n in artist_lower for n in names):
+                    return item
+            return items[0]   # fallback: return first result
+        except Exception:
+            continue
+    return None
 
 
 def _artist_pool(artist_name: str, exclude_id: str) -> list:
@@ -420,40 +440,66 @@ def inc_views():
 #  Worst-case Spotify API calls: 3 (seed + artist + year)
 #  With caching: 0-3 depending on what's already cached
 # ──────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────────
+#  ROUTES — Recommend
+#  Speed: pick bucket type FIRST, then fire exactly ONE pool call.
+#  Total Spotify calls per request: 2 (seed + one pool), both cached.
+# ──────────────────────────────────────────────────────────────────
 @app.post("/api/recommend")
 def recommend(req: SearchRequest):
-    # Call 1: seed lookup
+    # ── 1. Seed lookup (1 call) ──────────────────────────────────
     seed = search_track(req.song.strip(), req.artist.strip())
     if not seed:
         raise HTTPException(404,
-            f"Could not find '{req.song}' by '{req.artist}' on Spotify.")
+            f"Could not find '{req.song}' by '{req.artist}' on Spotify. "
+            "Try checking the spelling or using the exact Spotify track name.")
 
     seed_year = int(seed["album"]["release_date"][:4])
     seed_id   = seed["id"]
     artist_nm = seed["artists"][0]["name"]
 
-    # Call 2: artist pool
-    pool1 = filter_tracks(_artist_pool(artist_nm, seed_id))
-
-    # Call 3: year pool (same year always; ±1 year only if genre_switch on)
-    pool2 = filter_tracks(_year_pool(seed_year, seed_id))
-    pool3: list = []
-    if req.genre_switch:
-        yr    = random.choice([seed_year - 1, seed_year + 1])
-        pool3 = filter_tracks(_year_pool(yr, seed_id))   # may hit cache
-
+    # ── 2. Pick bucket type FIRST (no API calls yet) ─────────────
     if not req.genre_switch:
-        candidates = [(pool1, "Same Artist")] * 3 + [(pool2, "Same Year")]
+        # Stay on same artist — only option
+        bucket_choices = ["artist", "artist", "artist", "same_year"]
     else:
-        candidates = [(pool1, "Same Artist"), (pool2, "Same Year"), (pool3, "±1 Year")]
+        bucket_choices = ["artist", "same_year", "adj_year"]
 
-    non_empty = [(p, lbl) for p, lbl in candidates if p]
-    if not non_empty:
+    bucket = random.choice(bucket_choices)
+
+    # ── 3. Fetch ONLY that one pool (1 call) ─────────────────────
+    if bucket == "artist":
+        pool   = filter_tracks(_artist_pool(artist_nm, seed_id))
+        reason = "Same Artist"
+    elif bucket == "same_year":
+        pool   = filter_tracks(_year_pool(seed_year, seed_id))
+        reason = "Same Year"
+    else:  # adj_year
+        yr     = random.choice([seed_year - 1, seed_year + 1])
+        pool   = filter_tracks(_year_pool(yr, seed_id))
+        reason = "±1 Year"
+
+    # ── 4. If chosen bucket is empty, try the others in order ────
+    if not pool:
+        fallbacks = [
+            ("artist",    lambda: filter_tracks(_artist_pool(artist_nm, seed_id)),    "Same Artist"),
+            ("same_year", lambda: filter_tracks(_year_pool(seed_year, seed_id)),      "Same Year"),
+            ("adj_year",  lambda: filter_tracks(_year_pool(seed_year - 1, seed_id)), "±1 Year"),
+        ]
+        for fb_key, fb_fn, fb_reason in fallbacks:
+            if fb_key == bucket:
+                continue   # already tried this one
+            pool = fb_fn()
+            reason = fb_reason
+            if pool:
+                break
+
+    if not pool:
         raise HTTPException(404,
             "No recommendations found. Try a different song or check the blacklist.")
 
-    pool, reason = random.choice(non_empty)
-    pick         = random.choice(popularity_filter(pool, req.popularity))
+    # ── 5. Apply popularity filter + pick ────────────────────────
+    pick = random.choice(popularity_filter(pool, req.popularity))
 
     return {
         "seed":           fmt(seed),

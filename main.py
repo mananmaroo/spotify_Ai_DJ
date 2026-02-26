@@ -33,17 +33,7 @@ With 10-min cache: 0-2 depending on history
 Rate limiting: threading.Lock serialises all calls + 429 Retry-After respected
 """
 
-import re, random, base64, time, secrets, threading
-import requests
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, RedirectResponse
-from pydantic import BaseModel
-from typing import Optional
-from urllib.parse import urlencode
 
-# ─────────────────────────────────────────────────────────────────
-SPOTIFY_CLIENT_ID     = "YOUR_SPOTIFY_CLIENT_ID"
-SPOTIFY_CLIENT_SECRET = "YOUR_SPOTIFY_CLIENT_SECRET"
 REDIRECT_URI          = "https://spotify-ai-dj.onrender.com/callback"
 SCOPES = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state"
 

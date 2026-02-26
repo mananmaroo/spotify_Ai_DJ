@@ -247,30 +247,7 @@ footer{margin-top:32px;text-align:center;font-size:10px;color:#1a1a1a}
 .view-counter{margin-top:7px;font-size:11px;color:#2e2e2e;letter-spacing:.1em}
 .view-counter span{color:#3a3a3a}
 
-/* POPULARITY + GENRE PANELS */
-.pref-row{display:grid;grid-template-columns:1fr 1fr;gap:9px;width:100%;max-width:700px;margin-bottom:9px}
-.pref-panel{background:var(--surf);border:1px solid var(--b);border-radius:var(--rad);padding:13px 16px}
-.pref-lbl{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--mu);margin-bottom:8px;display:flex;align-items:center;gap:7px}
-.pop-btns{display:flex;flex-direction:column;gap:5px}
-.pop-btn{padding:6px 12px;border-radius:20px;border:1px solid var(--b);background:none;
-  color:var(--mu);font-size:12px;cursor:pointer;transition:all .15s;text-align:left;display:flex;align-items:center;gap:7px}
-.pop-btn:hover{border-color:var(--g);color:var(--tx)}
-.pop-btn.sel{background:var(--g);border-color:var(--g);color:#000;font-weight:600}
-.pop-icon{font-size:14px;flex-shrink:0}
-/* Genre toggle */
-.genre-toggle{display:flex;flex-direction:column;gap:10px}
-.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.toggle-lbl{font-size:13px;color:var(--tx);line-height:1.3}
-.toggle-sub{font-size:10px;color:var(--mu);margin-top:1px}
-.sw{position:relative;width:42px;height:24px;flex-shrink:0}
-.sw input{opacity:0;width:0;height:0}
-.sw-track{position:absolute;inset:0;background:#222;border-radius:24px;cursor:pointer;transition:background .2s;border:1px solid var(--b)}
-.sw input:checked+.sw-track{background:var(--g);border-color:var(--g)}
-.sw-track::after{content:'';position:absolute;width:18px;height:18px;border-radius:50%;
-  background:#fff;top:2px;left:2px;transition:transform .2s}
-.sw input:checked+.sw-track::after{transform:translateX(18px)}
 
-@media(max-width:480px){.pref-row{grid-template-columns:1fr}}
 
 /* CHANGE SEED PANEL */
 .seed-edit{width:100%;max-width:700px;margin-bottom:11px;display:none;
@@ -287,6 +264,14 @@ footer{margin-top:32px;text-align:center;font-size:10px;color:#1a1a1a}
   border-radius:var(--rad);font-size:12px;cursor:pointer;transition:all .15s}
 .seed-cancel:hover{border-color:var(--r);color:var(--r)}
 @media(max-width:540px){.seed-edit-row{grid-template-columns:1fr 1fr;}.seed-edit-row .seed-apply,.seed-edit-row .seed-cancel{grid-column:span 2}}
+
+/* POPULARITY */
+.pop-panel{padding:13px 16px}
+.pop-btns{display:flex;gap:7px;flex-wrap:wrap}
+.pop-btn{padding:6px 16px;border-radius:20px;border:1px solid var(--b);background:none;
+  color:var(--mu);font-size:12px;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px}
+.pop-btn:hover{border-color:var(--g);color:var(--tx)}
+.pop-btn.sel{background:var(--g);border-color:var(--g);color:#000;font-weight:600}
 </style>
 </head>
 <body>
@@ -308,6 +293,16 @@ footer{margin-top:32px;text-align:center;font-size:10px;color:#1a1a1a}
 </div>
 <div class="warn" id="pw">⚠️ Web Playback SDK needs <strong>Spotify Premium</strong>. Without it the mix uses 30s previews — still fully automatic.</div>
 
+<!-- POPULARITY -->
+<div class="panel pop-panel">
+  <div class="sec-lbl">🔥 Song Popularity <span class="active-chip" id="pop-chip">Balanced</span></div>
+  <div class="pop-btns">
+    <button class="pop-btn" data-p="popular"     onclick="setPop(this)">🌟 Popular</button>
+    <button class="pop-btn sel" data-p="balanced" onclick="setPop(this)">⚖️ Balanced</button>
+    <button class="pop-btn" data-p="underground" onclick="setPop(this)">💎 Underground</button>
+  </div>
+</div>
+
 <!-- BLACKLIST -->
 <div class="panel">
   <div class="bl-hd" onclick="toggleBL()">
@@ -321,56 +316,6 @@ footer{margin-top:32px;text-align:center;font-size:10px;color:#1a1a1a}
     </div>
     <div class="bl-tags" id="bltags"><span class="bl-empty">No artists blocked yet</span></div>
     <div class="bl-note">⚠️ Resets on server restart by design</div>
-  </div>
-</div>
-
-<!-- POPULARITY + GENRE PREFS -->
-<div class="pref-row">
-  <!-- Popularity -->
-  <div class="pref-panel">
-    <div class="pref-lbl">🔥 Song Popularity</div>
-    <div class="pop-btns">
-      <button class="pop-btn" data-p="popular" onclick="setPop(this)">
-        <span class="pop-icon">🌟</span><div><div>Popular</div><div style="font-size:10px;opacity:.6">Top charts &amp; hits</div></div>
-      </button>
-      <button class="pop-btn sel" data-p="balanced" onclick="setPop(this)">
-        <span class="pop-icon">⚖️</span><div><div>Balanced</div><div style="font-size:10px;opacity:.6">Mix of known &amp; hidden</div></div>
-      </button>
-      <button class="pop-btn" data-p="underground" onclick="setPop(this)">
-        <span class="pop-icon">💎</span><div><div>Underground</div><div style="font-size:10px;opacity:.6">Deep cuts &amp; rare finds</div></div>
-      </button>
-    </div>
-  </div>
-  <!-- Genre & Variety -->
-  <div class="pref-panel">
-    <div class="pref-lbl">🎭 Mix Style</div>
-    <div class="genre-toggle">
-      <div class="toggle-row">
-        <div>
-          <div class="toggle-lbl">Genre Variety</div>
-          <div class="toggle-sub">Allow genre hops between songs</div>
-        </div>
-        <label class="sw"><input type="checkbox" id="genre-sw" checked onchange="updatePrefs()"/><span class="sw-track"></span></label>
-      </div>
-      <div class="toggle-row">
-        <div>
-          <div class="toggle-lbl">Era Variety</div>
-          <div class="toggle-sub">Mix songs from different years</div>
-        </div>
-        <label class="sw"><input type="checkbox" id="era-sw" checked onchange="updatePrefs()"/><span class="sw-track"></span></label>
-      </div>
-      <div style="margin-top:4px;padding-top:10px;border-top:1px solid var(--b)">
-        <div class="pref-lbl" style="margin-bottom:5px">🎚 Mix point</div>
-        <div class="mp-btns" style="gap:5px">
-          <button class="mp-btn" data-f="0.25" onclick="setMP(this)">¼</button>
-          <button class="mp-btn" data-f="0.333" onclick="setMP(this)">⅓</button>
-          <button class="mp-btn sel" data-f="0.5" onclick="setMP(this)">½</button>
-          <button class="mp-btn" data-f="0.667" onclick="setMP(this)">⅔</button>
-          <button class="mp-btn" data-f="0.75" onclick="setMP(this)">¾</button>
-          <button class="mp-btn" data-f="1.0" onclick="setMP(this)">Full</button>
-        </div>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -480,10 +425,8 @@ const TICK    = 250;   // engine poll interval ms
 let AT=null, RT=null, exp=0;            // auth
 let sdk=null, devId=null, sdkOK=false;  // spotify sdk
 let vol=0.8;
-let mf=0.5;                             // mix fraction
-let popPref='balanced';                  // popular | balanced | underground
-let genreSwitch=true;                    // allow genre variety
-let eraSwitch=true;                      // allow year variety
+let mf=0.5;
+let popPref='balanced';                             // mix fraction
 let running=false, paused=false;
 let mixFired=false, inXF=false;
 let xfTimer=null, tickTimer=null;
@@ -503,11 +446,8 @@ function setPop(btn){
   document.querySelectorAll('.pop-btn').forEach(b=>b.classList.remove('sel'));
   btn.classList.add('sel');
   popPref=btn.dataset.p;
-}
-
-function updatePrefs(){
-  genreSwitch=$('genre-sw').checked;
-  eraSwitch=$('era-sw').checked;
+  const labels={'popular':'Popular','balanced':'Balanced','underground':'Underground'};
+  $('pop-chip').textContent=labels[popPref]||popPref;
 }
 
 function setMP(btn){
@@ -586,8 +526,7 @@ function setVol(v){vol=v/100;if(isSDK())sdkVol(vol);if(nowA)nowA.volume=vol;}
 //  API
 // ══════════════════════════════════════════════════
 async function getRec(song,art){
-  const body={song,artist:art,popularity:popPref,genre_switch:genreSwitch&&eraSwitch};
-  const r=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const r=await fetch('/api/recommend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({song,artist:art,popularity:popPref})});
   if(!r.ok){const e=await r.json().catch(()=>({detail:'Error'}));throw new Error(e.detail||'Request failed');}
   return r.json();
 }

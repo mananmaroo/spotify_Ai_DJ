@@ -303,6 +303,19 @@ footer{margin-top:32px;text-align:center;font-size:10px;color:#1a1a1a}
   </div>
 </div>
 
+<!-- MIX POINT -->
+<div class="panel" style="padding:13px 16px">
+  <div class="sec-lbl">🎚 Mix Point — transition after <span class="active-chip" id="mp-chip">½ song</span></div>
+  <div class="mp-btns">
+    <button class="mp-btn"     data-f="0.25"  onclick="setMP(this)">¼ song</button>
+    <button class="mp-btn"     data-f="0.333" onclick="setMP(this)">⅓ song</button>
+    <button class="mp-btn sel" data-f="0.5"   onclick="setMP(this)">½ song</button>
+    <button class="mp-btn"     data-f="0.667" onclick="setMP(this)">⅔ song</button>
+    <button class="mp-btn"     data-f="0.75"  onclick="setMP(this)">¾ song</button>
+    <button class="mp-btn"     data-f="1.0"   onclick="setMP(this)">Full song</button>
+  </div>
+</div>
+
 <!-- BLACKLIST -->
 <div class="panel">
   <div class="bl-hd" onclick="toggleBL()">
@@ -426,7 +439,7 @@ let AT=null, RT=null, exp=0;            // auth
 let sdk=null, devId=null, sdkOK=false;  // spotify sdk
 let vol=0.8;
 let mf=0.5;
-let popPref='balanced';                             // mix fraction
+let popPref='balanced';                // popular | balanced | underground
 let running=false, paused=false;
 let mixFired=false, inXF=false;
 let xfTimer=null, tickTimer=null;
@@ -454,8 +467,10 @@ function setMP(btn){
   document.querySelectorAll('.mp-btn').forEach(b=>b.classList.remove('sel'));
   btn.classList.add('sel');
   mf=parseFloat(btn.dataset.f);
-  const m={'0.25':'¼','0.333':'⅓','0.5':'½','0.667':'⅔','0.75':'¾','1.0':'Full'};
-  const mpd=$('mpd');if(mpd)mpd.textContent='Mix @ '+(m[btn.dataset.f]||btn.textContent);
+  const labels={'0.25':'¼ song','0.333':'⅓ song','0.5':'½ song','0.667':'⅔ song','0.75':'¾ song','1.0':'Full song'};
+  const lbl=labels[btn.dataset.f]||btn.textContent;
+  const chip=$('mp-chip');if(chip)chip.textContent=lbl;
+  const mpd=$('mpd');if(mpd)mpd.textContent='Mix @ '+lbl;
   document.querySelectorAll('.pgmk').forEach(mk=>mk.style.left=(mf*100)+'%');
 }
 

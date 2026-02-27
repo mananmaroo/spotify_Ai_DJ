@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from typing import Optional
 from urllib.parse import urlencode
 
+
 try:
     import yt_dlp as _yt_dlp
     YT_OK = True
@@ -29,7 +30,6 @@ New features:
   - /api/mixer/search — unified Spotify+YouTube search
   - /api/mixer/playlist — import Spotify or YouTube playlist
 """
-
 
 
 REDIRECT_URI          = "https://spotify-ai-dj.onrender.com/callback"
@@ -361,17 +361,18 @@ def sp_playlist_items(pid: str) -> list:
     tracks = []
     url    = f"https://api.spotify.com/v1/playlists/{pid}/tracks"
     params = {"limit": 100, "market": "US"}
-    while url and len(tracks) < 500:
-        try:
-            d = sp_get(url, params)
-            params = None   # 'next' URL already has all params encoded
-            for item in d.get("items", []):
-                t = item.get("track")
-                if t and t.get("type") == "track" and t.get("id"):
-                    tracks.append(fmt_sp(t, fetch_preview=False))
-            url = d.get("next")
-        except Exception:
-            break
+    pages  = 0
+    while url and len(tracks) < 500 and pages < 10:
+        d = sp_get(url, params)   # let errors propagate — no silent catch
+        params = None
+        pages += 1
+        for item in d.get("items", []):
+            t = item.get("track")
+            if not t: continue
+            # Spotify returns null tracks for local files / deleted tracks
+            if t.get("type") == "track" and t.get("id") and t.get("name"):
+                tracks.append(fmt_sp(t, fetch_preview=False))
+        url = d.get("next")
     return tracks
 
 # ─────────────────────────────────────────────
@@ -569,6 +570,45 @@ def yt_recommend(req: SearchReq):
 def preview_api(track_id: str):
     """Lazy preview URL fetch — called per-track when about to play."""
     return {"preview_url": get_preview(track_id)}
+
+
+@app.get("/api/yt/audio/{video_id}")
+def yt_audio(video_id: str):
+    """Get best audio-only stream URL for a YouTube video via yt-dlp."""
+    if not YT_OK:
+        raise HTTPException(501, "yt-dlp not available.")
+    key = f"yta:{video_id}"
+    hit = _cget(key)
+    if hit: return hit
+    try:
+        opts = {
+            "quiet": True, "no_warnings": True,
+            "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+            "skip_download": True,
+        }
+        with _yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(
+                f"https://www.youtube.com/watch?v={video_id}", download=False
+            )
+            url = info.get("url")
+            if not url:
+                # fallback: check formats list
+                for fmt in (info.get("formats") or []):
+                    if fmt.get("acodec","none") != "none" and fmt.get("vcodec","none") == "none":
+                        url = fmt.get("url"); break
+                if not url and info.get("formats"):
+                    url = info["formats"][-1].get("url","")
+            if not url:
+                raise HTTPException(404, "No audio stream found.")
+            dur_ms = int(info.get("duration", 0)) * 1000
+            result = {"audio_url": url, "duration_ms": dur_ms,
+                      "title": info.get("title",""), "expires_in": 21600}
+            # Cache for 5 hours (streams expire in ~6h)
+            _cache[key] = (result, time.time() + 18000)
+            return result
+    except HTTPException: raise
+    except Exception as e:
+        raise HTTPException(500, f"yt-dlp error: {e}")
 
 @app.get("/")
 def index(): return FileResponse("index.html")

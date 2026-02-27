@@ -6,12 +6,17 @@ from pydantic import BaseModel
 from typing import Optional
 from urllib.parse import urlencode
 
+try:
+    import yt_dlp as _yt_dlp
+    YT_OK = True
+except ImportError:
+    YT_OK = False
+
 # -----------------------------
 # Spotify Credentials (hardcoded for now)
 # -----------------------------
 SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
 SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
-
 """
 Spotify + YouTube DJ — FastAPI backend
 
@@ -26,12 +31,6 @@ New features:
 """
 
 
-
-try:
-    import yt_dlp
-    YT_OK = True
-except ImportError:
-    YT_OK = False
 
 REDIRECT_URI          = "https://spotify-ai-dj.onrender.com/callback"
 SCOPES = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state"
@@ -293,38 +292,75 @@ def yt_search(q: str, n: int = 8) -> list:
     hit = _cget(key)
     if hit: return hit
     try:
-        opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "skip_download": True}
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(f"ytsearch{n}:{q}", download=False)
-            res  = [fmt_yt(e) for e in (info.get("entries") or []) if e and e.get("id")]
-            _cset(key, res)
-            return res
+        opts = {
+            "quiet": True, "no_warnings": True,
+            "extract_flat": "in_playlist", "skip_download": True,
+            "default_search": f"ytsearch{n}",
+        }
+        with _yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(q, download=False)
+            entries = info.get("entries") or ([info] if info.get("id") else [])
+            results = []
+            for e in entries:
+                if not e or not e.get("id"): continue
+                dur = int(e.get("duration") or 0) * 1000
+                thumb = ""
+                tlist = e.get("thumbnails") or []
+                if tlist: thumb = tlist[-1].get("url","") if isinstance(tlist[0],dict) else str(tlist[-1])
+                elif e.get("thumbnail"): thumb = str(e["thumbnail"])
+                results.append({
+                    "source":"youtube","id":e["id"],"uri":"",
+                    "name": e.get("title",""),"artist": e.get("uploader","") or e.get("channel",""),
+                    "album":"","year":"","preview_url":None,
+                    "youtube_url":f"https://youtube.com/watch?v={e['id']}",
+                    "image":thumb,"duration_ms":dur,"popularity":0,
+                })
+            _cset(key, results)
+            return results
     except Exception:
         return []
 
+
 def yt_playlist_items(url: str) -> list:
     if not YT_OK:
-        raise HTTPException(501, "YouTube support unavailable on this server.")
+        raise HTTPException(501, "yt-dlp not available on this server.")
     key = f"ytpl:{url}"
     hit = _cget(key)
     if hit: return hit
     try:
-        opts = {"quiet": True, "no_warnings": True, "extract_flat": True, "skip_download": True}
-        with yt_dlp.YoutubeDL(opts) as ydl:
+        opts = {
+            "quiet": True, "no_warnings": True,
+            "extract_flat": True, "skip_download": True,
+        }
+        with _yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            res  = [fmt_yt(e) for e in (info.get("entries") or []) if e and e.get("id")][:300]
-            _cset(key, res)
-            return res
+            entries = info.get("entries") or []
+            results = []
+            for e in entries:
+                if not e or not e.get("id"): continue
+                dur = int(e.get("duration") or 0) * 1000
+                thumb = ""
+                tlist = e.get("thumbnails") or []
+                if tlist: thumb = tlist[-1].get("url","") if isinstance(tlist[0],dict) else str(tlist[-1])
+                elif e.get("thumbnail"): thumb = str(e["thumbnail"])
+                results.append({
+                    "source":"youtube","id":e["id"],"uri":"",
+                    "name": e.get("title",""),"artist": e.get("uploader","") or e.get("channel",""),
+                    "album":"","year":"","preview_url":None,
+                    "youtube_url":f"https://youtube.com/watch?v={e['id']}",
+                    "image":thumb,"duration_ms":dur,"popularity":0,
+                })
+            results = results[:300]
+            _cset(key, results)
+            return results
     except Exception as e:
-        raise HTTPException(400, f"Could not fetch YouTube playlist: {e}")
+        raise HTTPException(400, f"Could not load YouTube playlist: {e}")
+
 
 def sp_playlist_items(pid: str) -> list:
     tracks = []
     url    = f"https://api.spotify.com/v1/playlists/{pid}/tracks"
-    params = {
-        "limit":  100, "market": "US",
-        "fields": "next,items(track(id,name,artists,album,duration_ms,popularity,type,uri,external_urls))",
-    }
+    params = {"limit": 100, "market": "US"}
     while url and len(tracks) < 500:
         try:
             d = sp_get(url, params)
@@ -341,9 +377,20 @@ def sp_playlist_items(pid: str) -> list:
 # ─────────────────────────────────────────────
 #  MODELS
 # ─────────────────────────────────────────────
+def popularity_filter(tracks: list, mode: str) -> list:
+    if mode == "popular":
+        hi = [t for t in tracks if t.get("popularity", 0) >= 60]
+        return hi or tracks
+    if mode == "underground":
+        lo = [t for t in tracks if t.get("popularity", 0) < 40]
+        return lo or tracks
+    mid = [t for t in tracks if 30 <= t.get("popularity", 50) <= 70]
+    return mid or tracks
+
 class SearchReq(BaseModel):
-    song:   str
-    artist: str
+    song:       str
+    artist:     str
+    popularity: str = "balanced"   # popular | balanced | underground
 
 class RefreshReq(BaseModel):
     refresh_token: str
@@ -452,7 +499,7 @@ def recommend(req: SearchReq):
     if not pool:
         raise HTTPException(404, "No recommendations found. Try a different song.")
 
-    pick = random.choice(pool)
+    pick = random.choice(popularity_filter(pool, req.popularity))
     return {
         "seed":           fmt_sp(seed),
         "recommendation": {**fmt_sp(pick), "match_reason": reason},

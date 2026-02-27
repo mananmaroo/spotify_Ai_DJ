@@ -257,6 +257,13 @@ input[type=range]{width:80px;accent-color:var(--g);background:none;border:none;p
   .irow{grid-template-columns:1fr}
   .mx-search-grid{grid-template-columns:1fr}
 }
+
+/* POPULARITY */
+.pop-btns{display:flex;gap:6px;flex-wrap:wrap}
+.pop-btn{padding:5px 13px;border-radius:20px;border:1px solid var(--b);
+  background:none;color:var(--mu);font-size:12px}
+.pop-btn:hover{border-color:var(--g);color:var(--tx)}
+.pop-btn.sel{background:var(--g);border-color:var(--g);color:#000;font-weight:700}
 </style>
 </head>
 <body>
@@ -300,6 +307,17 @@ input[type=range]{width:80px;accent-color:var(--g);background:none;border:none;p
       <button class="mp-btn"     data-f="0.667" onclick="setMP(this)">⅔ song</button>
       <button class="mp-btn"     data-f="0.75"  onclick="setMP(this)">¾ song</button>
       <button class="mp-btn"     data-f="1.0"   onclick="setMP(this)">Full song</button>
+    </div>
+  </div>
+
+
+  <!-- POPULARITY -->
+  <div class="panel">
+    <div class="sec">🔥 Popularity <span class="chip" id="pop-chip">Balanced</span></div>
+    <div class="pop-btns">
+      <button class="pop-btn"     data-p="popular"     onclick="setPop(this)">🌟 Popular</button>
+      <button class="pop-btn sel" data-p="balanced"    onclick="setPop(this)">⚖️ Balanced</button>
+      <button class="pop-btn"     data-p="underground" onclick="setPop(this)">💎 Underground</button>
     </div>
   </div>
 
@@ -508,7 +526,7 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('act', t.dataset.tab===name));
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('act', p.id===`tab-${name}`));
   // Stop the OTHER tab's playback when switching
-  if (name==='mixer' && djRunning) { /* let DJ keep running in bg */ }
+  if (name==='mixer' && running) { /* let DJ keep running in bg */ }
   if (name==='dj'    && mxRunning) { /* let mixer keep running in bg */ }
 }
 
@@ -521,7 +539,7 @@ const TICK    = 250;
 let AT=null, RT=null, exp=0;
 let sdk=null, devId=null, sdkOK=false;
 let vol=0.8, mf=0.5;
-let djSrc='spotify';
+let djSrc='spotify', popPref='balanced';
 let running=false, paused=false;
 let mixFired=false, inXF=false;
 let xfTimer=null, tickTimer=null;
@@ -577,6 +595,17 @@ function setDJSrc(src) {
   $('dj-sp').classList.toggle('sel', src==='spotify');
   $('dj-yt').classList.toggle('sel', src==='youtube');
   if(running) djStop();
+}
+
+// ════════════════════════════════════════════════
+//  DJ — POPULARITY
+// ════════════════════════════════════════════════
+function setPop(btn){
+  document.querySelectorAll('[data-p]').forEach(b=>b.classList.remove('sel'));
+  btn.classList.add('sel');
+  popPref=btn.dataset.p;
+  const lbl={'popular':'Popular','balanced':'Balanced','underground':'Underground'};
+  $('pop-chip').textContent=lbl[popPref]||popPref;
 }
 
 // ════════════════════════════════════════════════
@@ -654,7 +683,7 @@ async function sdkVol(v){ await refreshIfNeeded(); if(sdk)await sdk.setVolume(v)
 // ════════════════════════════════════════════════
 async function getRec(song,art){
   const ep = djSrc==='youtube' ? '/api/yt/recommend' : '/api/recommend';
-  const r=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({song,artist:art})});
+  const r=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({song,artist:art,popularity:popPref})});
   if(!r.ok){ const e=await r.json().catch(()=>({detail:'Error'})); throw new Error(e.detail||'Request failed'); }
   return r.json();
 }
@@ -694,7 +723,7 @@ async function tick(){
   if(isSDK()){
     try{
       const st=await sdk.getCurrentState();
-      if(!st||!st.duration)return;
+      if(!st||!st.duration||st.duration<2000)return;
       const pos=st.position,dur=st.duration;
       $('npb-fill').style.width=(pos/dur*100)+'%';
       $('npb-t1').textContent=fm(pos); $('npb-t2').textContent=fm(dur);
@@ -704,7 +733,7 @@ async function tick(){
     }catch{}
   } else if(djSrc==='youtube'&&nowYT){
     const pos=nowYT.pos, dur=nowYT.dur;
-    if(!dur)return;
+    if(!dur||dur<2)return;
     $('npb-fill').style.width=(pos/dur*100)+'%';
     $('npb-t1').textContent=fm(pos*1000); $('npb-t2').textContent=fm(dur*1000);
     const trig=mf>=1?dur-XF_SECS:dur*mf-XF_SECS/2;
@@ -744,15 +773,17 @@ async function doAdvance(){
   if(nowA){nowA.pause();nowA.ontimeupdate=null;nowA=null;}
   if(nowYT){nowYT.pause();nowYT.destroy();nowYT=null;}
   nowT=nxtT; nxtT=null;
-  if(nxtA){nowA=nxtA;nxtA=null;}
+  if(nxtA){nowA=nxtA;nxtA=null;if(nowA)nowA.currentTime=0;}
   if(nxtYT){nowYT=nxtYT;nxtYT=null;}
   mixFired=false; inXF=false;
   hist.push(nowT); if(hist.length>20)hist.shift();
+  // Update UI FIRST so display matches audio immediately
   fillCard('now',nowT); $('now-bdg').className='bdg bdg-now'; $('now-bdg').textContent='NOW PLAYING';
   $('now-tc').classList.remove('is-mixing'); $('now-tc').classList.add('is-now');
   $('nxt-bdg').className='bdg bdg-nxt'; $('nxt-bdg').textContent='UP NEXT';
   updateNPB(nowT,true); updateQueue();
-  if(!isSDK()&&!nowYT&&nowA){ nowA.volume=vol; nowA.play().catch(()=>{}); }
+  // Start playback AFTER UI update
+  if(!isSDK()&&!nowYT&&nowA){ nowA.currentTime=0; nowA.volume=vol; nowA.play().catch(()=>{}); }
   curSong=nowT.name; curArt=nowT.artist.split(',')[0].trim();
   try{
     const d=await getRec(curSong,curArt);
@@ -1067,7 +1098,7 @@ async function mxPreloadNext(){
 
 function mxTick(){
   if(!mxRunning||mxPaused||mxInXF||!mxNow)return;
-  const pos=mxNow.pos, dur=mxNow.dur; if(!dur)return;
+  const pos=mxNow.pos, dur=mxNow.dur; if(!dur||dur<2)return;
   const t=mxQueue[mxIdx]; const mft=t?.mf??0.5;
   const trig=mft>=1?dur-MX_XF:dur*mft-MX_XF/2;
   $('mx-fill').style.width=(pos/dur*100)+'%';

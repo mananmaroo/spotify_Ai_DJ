@@ -31,7 +31,6 @@ New features:
   - /api/mixer/playlist — import Spotify or YouTube playlist
 """
 
-
 REDIRECT_URI          = "https://spotify-ai-dj.onrender.com/callback"
 SCOPES = "streaming user-read-email user-read-private user-read-playback-state user-modify-playback-state"
 
@@ -297,8 +296,10 @@ def yt_search(q: str, n: int = 8) -> list:
             "extract_flat": "in_playlist", "skip_download": True,
             "default_search": f"ytsearch{n}",
         }
+        # Append "official" to bias toward official artist content
+        official_q = q + " official audio" if "official" not in q.lower() else q
         with _yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(q, download=False)
+            info = ydl.extract_info(official_q, download=False)
             entries = info.get("entries") or ([info] if info.get("id") else [])
             results = []
             for e in entries:
@@ -357,36 +358,47 @@ def yt_playlist_items(url: str) -> list:
         raise HTTPException(400, f"Could not load YouTube playlist: {e}")
 
 
-def sp_playlist_items(pid: str) -> list:
+def sp_playlist_items(pid: str, user_token: str = None) -> list:
+    """Fetch playlist tracks. Uses user_token if provided (needed for Spotify-owned playlists)."""
     tracks = []
     url    = f"https://api.spotify.com/v1/playlists/{pid}/tracks"
     params = {"limit": 100, "market": "US"}
     pages  = 0
+    tok    = user_token or _token()   # prefer user token for owned playlists
     while url and len(tracks) < 500 and pages < 10:
-        d = sp_get(url, params)   # let errors propagate — no silent catch
-        params = None
-        pages += 1
-        for item in d.get("items", []):
-            t = item.get("track")
-            if not t: continue
-            # Spotify returns null tracks for local files / deleted tracks
-            if t.get("type") == "track" and t.get("id") and t.get("name"):
-                tracks.append(fmt_sp(t, fetch_preview=False))
-        url = d.get("next")
+        try:
+            if user_token:
+                # Use user token directly for Spotify-owned playlists
+                r = requests.get(url,
+                    headers={"Authorization": f"Bearer {user_token}"},
+                    params=params, timeout=15)
+                r.raise_for_status()
+                d = r.json()
+            else:
+                d = sp_get(url, params)
+            params = None
+            pages += 1
+            for item in d.get("items", []):
+                t = item.get("track")
+                if not t: continue
+                if t.get("type") == "track" and t.get("id") and t.get("name"):
+                    tracks.append(fmt_sp(t, fetch_preview=False))
+            url = d.get("next")
+        except Exception as e:
+            raise HTTPException(502, f"Spotify error: {e}")
     return tracks
 
 # ─────────────────────────────────────────────
 #  MODELS
 # ─────────────────────────────────────────────
 def popularity_filter(tracks: list, mode: str) -> list:
+    """Strict filter — returns empty list if nothing matches (caller decides fallback)."""
     if mode == "popular":
-        hi = [t for t in tracks if t.get("popularity", 0) >= 60]
-        return hi or tracks
+        return [t for t in tracks if t.get("popularity", 0) >= 55]
     if mode == "underground":
-        lo = [t for t in tracks if t.get("popularity", 0) < 40]
-        return lo or tracks
-    mid = [t for t in tracks if 30 <= t.get("popularity", 50) <= 70]
-    return mid or tracks
+        return [t for t in tracks if t.get("popularity", 0) < 35]
+    # balanced: exclude extremes
+    return [t for t in tracks if 30 <= t.get("popularity", 50) <= 75]
 
 class SearchReq(BaseModel):
     song:       str
@@ -404,8 +416,6 @@ class MxSearchReq(BaseModel):
     source: str = "both"   # spotify | youtube | both
     limit:  int = 8
 
-class MxPlaylistReq(BaseModel):
-    url: str
 
 # ─────────────────────────────────────────────
 #  ROUTES — auth
@@ -490,21 +500,32 @@ def recommend(req: SearchReq):
     yr  = int(seed["album"]["release_date"][:4])
     nm  = seed["artists"][0]["name"]
 
+    # Build both pools so popularity filter has more to work with
     if random.random() < 0.6:
-        pool = artist_pool(nm, sid);  reason = "Same Artist"
-        if not pool: pool = year_pool(yr, sid); reason = "Same Year"
+        primary_pool = artist_pool(nm, sid);  primary_reason = "Same Artist"
+        backup_pool  = year_pool(yr, sid);    backup_reason  = "Same Year"
     else:
-        pool = year_pool(yr, sid);    reason = "Same Year"
-        if not pool: pool = artist_pool(nm, sid); reason = "Same Artist"
+        primary_pool = year_pool(yr, sid);    primary_reason = "Same Year"
+        backup_pool  = artist_pool(nm, sid);  backup_reason  = "Same Artist"
 
+    # Try primary pool with popularity filter
+    filtered = popularity_filter(primary_pool, req.popularity) if primary_pool else []
+    if filtered:
+        return {"seed": fmt_sp(seed),
+                "recommendation": {**fmt_sp(random.choice(filtered)), "match_reason": primary_reason}}
+
+    # Try backup pool with popularity filter
+    filtered = popularity_filter(backup_pool, req.popularity) if backup_pool else []
+    if filtered:
+        return {"seed": fmt_sp(seed),
+                "recommendation": {**fmt_sp(random.choice(filtered)), "match_reason": backup_reason}}
+
+    # Last resort: any track from either pool
+    pool = primary_pool or backup_pool
     if not pool:
         raise HTTPException(404, "No recommendations found. Try a different song.")
-
-    pick = random.choice(popularity_filter(pool, req.popularity))
-    return {
-        "seed":           fmt_sp(seed),
-        "recommendation": {**fmt_sp(pick), "match_reason": reason},
-    }
+    return {"seed": fmt_sp(seed),
+            "recommendation": {**fmt_sp(random.choice(pool)), "match_reason": primary_reason}}
 
 # ─────────────────────────────────────────────
 #  ROUTES — Mixer search
@@ -528,13 +549,18 @@ def mixer_search(req: MxSearchReq):
 # ─────────────────────────────────────────────
 #  ROUTES — Mixer playlist import
 # ─────────────────────────────────────────────
+class MxPlaylistReq(BaseModel):
+    url:        str
+    user_token: str = ""   # optional user AT for Spotify-owned playlists
+
 @app.post("/api/mixer/playlist")
 def mixer_playlist(req: MxPlaylistReq):
     url = req.url.strip()
     if "spotify.com/playlist/" in url:
         m = re.search(r"playlist/([A-Za-z0-9]+)", url)
         if not m: raise HTTPException(400, "Invalid Spotify playlist URL.")
-        tracks = sp_playlist_items(m.group(1))
+        ut = req.user_token.strip() or None
+        tracks = sp_playlist_items(m.group(1), user_token=ut)
         return {"source": "spotify", "tracks": tracks, "count": len(tracks)}
     elif "youtube.com" in url or "music.youtube.com" in url:
         tracks = yt_playlist_items(url)

@@ -18,6 +18,7 @@ except ImportError:
 # -----------------------------
 SPOTIFY_CLIENT_ID = "1924460439a14115b48fc7d3d03e2e2a"
 SPOTIFY_CLIENT_SECRET = "95a349e198c248448ed7e8ad1029410e"
+
 """
 Spotify + YouTube DJ — FastAPI backend
 
@@ -635,6 +636,27 @@ def yt_audio(video_id: str):
     except HTTPException: raise
     except Exception as e:
         raise HTTPException(500, f"yt-dlp error: {e}")
+
+
+@app.get("/api/spotify/track/{track_id}")
+def get_track(track_id: str, token: str = Query("")):
+    """Get full track metadata including duration. Uses user token if provided."""
+    try:
+        headers = {"Authorization": f"Bearer {token}"} if token else {"Authorization": f"Bearer {_token()}"}
+        r = requests.get(f"https://api.spotify.com/v1/tracks/{track_id}",
+                         headers=headers, params={"market": "US"}, timeout=10)
+        r.raise_for_status()
+        t = r.json()
+        alb = t.get("album", {}); imgs = alb.get("images", [])
+        return {
+            "id": t["id"], "uri": t.get("uri",""),
+            "name": t["name"], "duration_ms": t.get("duration_ms", 0),
+            "artist": ", ".join(a["name"] for a in t.get("artists", [])),
+            "image": imgs[0]["url"] if imgs else "",
+            "popularity": t.get("popularity", 0),
+        }
+    except Exception as e:
+        raise HTTPException(502, str(e))
 
 @app.get("/")
 def index(): return FileResponse("index.html")

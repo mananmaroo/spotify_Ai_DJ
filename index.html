@@ -277,6 +277,7 @@ input[type=range]{width:80px;accent-color:var(--g);background:none;border:none;p
 <div class="tabs">
   <button class="tab act" data-tab="dj" onclick="switchTab('dj')">🤖 AI DJ</button>
   <button class="tab"     data-tab="mixer" onclick="switchTab('mixer')">🎚 Mixer</button>
+  <button class="tab"     data-tab="help"  onclick="switchTab('help')">📖 Guide</button>
 </div>
 
 <!-- ═══════════════════════════════════════════════
@@ -473,6 +474,15 @@ input[type=range]{width:80px;accent-color:var(--g);background:none;border:none;p
     <div class="queue-hd">
       <div class="queue-title">Queue <span class="queue-cnt" id="q-cnt">0 songs</span></div>
       <div class="queue-acts">
+        <select id="mx-all-mf" class="q-mf" title="Set mix point for all songs">
+          <option value="0.25">¼ all</option>
+          <option value="0.333">⅓ all</option>
+          <option value="0.5" selected>½ all</option>
+          <option value="0.667">⅔ all</option>
+          <option value="0.75">¾ all</option>
+          <option value="1.0">Full all</option>
+        </select>
+        <button class="q-clr" style="border-color:#555;color:var(--tx)" onclick="mxSetAllMF()">Set All</button>
         <button class="q-clr" onclick="mxClear()">Clear All</button>
       </div>
     </div>
@@ -511,6 +521,178 @@ input[type=range]{width:80px;accent-color:var(--g);background:none;border:none;p
   </div>
 
 </div><!-- /tab-mixer -->
+<!-- ═══════════════════════════════════════════════
+     TAB 3 — GUIDE
+════════════════════════════════════════════════ -->
+<div id="tab-help" class="pane wrap">
+
+  <div class="panel" style="margin-top:10px">
+    <div class="sec">🤖 What is AI DJ?</div>
+    <p style="font-size:13px;line-height:1.7;color:var(--tx)">
+      AI DJ is an infinite music mix engine. You enter a seed song and artist, and it continuously finds
+      the next track — by the same artist or from the same year — and crossfades between them automatically.
+      No playlist needed. It just keeps going forever.
+    </p>
+  </div>
+
+  <div class="panel">
+    <div class="sec">🎵 Spotify vs YouTube Mode</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px">
+      <div style="background:#0d1a0d;border:1px solid #1a3a1a;border-radius:8px;padding:12px">
+        <div style="font-size:13px;font-weight:700;color:var(--g);margin-bottom:6px">🎵 Spotify</div>
+        <ul style="font-size:12px;color:var(--mu);line-height:1.8;padding-left:14px">
+          <li>Premium = full songs</li>
+          <li>Free = 30s previews</li>
+          <li>Click <b style="color:var(--tx)">CONNECT SPOTIFY</b> for full tracks</li>
+          <li>Popularity filter works here</li>
+          <li>Mixer uses full songs if connected</li>
+        </ul>
+      </div>
+      <div style="background:#1a0d0d;border:1px solid #3a1a1a;border-radius:8px;padding:12px">
+        <div style="font-size:13px;font-weight:700;color:#ff4444;margin-bottom:6px">▶ YouTube</div>
+        <ul style="font-size:12px;color:var(--mu);line-height:1.8;padding-left:14px">
+          <li>No login required</li>
+          <li>Full audio streams</li>
+          <li>Music videos included</li>
+          <li>Popularity filter N/A</li>
+          <li>Slightly slower to load</li>
+        </ul>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--mu);margin-top:10px">
+      ⚠️ Switching sources stops the current mix. You can't mix Spotify + YouTube tracks together in the same DJ session.
+    </p>
+  </div>
+
+  <div class="panel">
+    <div class="sec">🎚 Mix Point</div>
+    <p style="font-size:13px;line-height:1.7;color:var(--tx)">
+      Controls <em>when</em> the crossfade starts relative to the song's length.
+    </p>
+    <div style="margin-top:10px;overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="border-bottom:1px solid var(--b)">
+            <th style="text-align:left;padding:6px 8px;color:var(--mu)">Setting</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--mu)">Triggers at</th>
+            <th style="text-align:left;padding:6px 8px;color:var(--mu)">Feel</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="border-bottom:1px solid #1a1a1a"><td style="padding:6px 8px">¼ song</td><td style="padding:6px 8px;color:var(--mu)">25% through</td><td style="padding:6px 8px;color:var(--mu)">Very quick, radio-style</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a"><td style="padding:6px 8px">⅓ song</td><td style="padding:6px 8px;color:var(--mu)">33% through</td><td style="padding:6px 8px;color:var(--mu)">Quick DJ style</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a"><td style="padding:6px 8px">½ song <span style="background:var(--g);color:#000;border-radius:8px;padding:1px 6px;font-size:10px;margin-left:4px">default</span></td><td style="padding:6px 8px;color:var(--mu)">50% through</td><td style="padding:6px 8px;color:var(--mu)">Balanced</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a"><td style="padding:6px 8px">⅔ song</td><td style="padding:6px 8px;color:var(--mu)">67% through</td><td style="padding:6px 8px;color:var(--mu)">Hear most of each song</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a"><td style="padding:6px 8px">¾ song</td><td style="padding:6px 8px;color:var(--mu)">75% through</td><td style="padding:6px 8px;color:var(--mu)">Near full song</td></tr>
+          <tr><td style="padding:6px 8px">Full song</td><td style="padding:6px 8px;color:var(--mu)">End of track</td><td style="padding:6px 8px;color:var(--mu)">Play the whole song</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:12px;color:var(--mu);margin-top:8px">
+      The crossfade itself is always 4 seconds long. This setting is saved between sessions.
+    </p>
+  </div>
+
+  <div class="panel">
+    <div class="sec">🔥 Popularity Filter</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0">
+      <div style="background:#0d0d0d;border:1px solid var(--b);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px">🌟</div>
+        <div style="font-size:12px;font-weight:700;margin:4px 0">Popular</div>
+        <div style="font-size:11px;color:var(--mu)">Spotify score ≥70<br>Chart hits & well-known tracks</div>
+      </div>
+      <div style="background:#0d0d0d;border:1px solid var(--b);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px">⚖️</div>
+        <div style="font-size:12px;font-weight:700;margin:4px 0">Balanced</div>
+        <div style="font-size:11px;color:var(--mu)">Score 35–70<br>Mix of known & deeper cuts</div>
+      </div>
+      <div style="background:#0d0d0d;border:1px solid var(--b);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:18px">💎</div>
+        <div style="font-size:12px;font-weight:700;margin:4px 0">Underground</div>
+        <div style="font-size:11px;color:var(--mu)">Score &lt;35<br>Deep cuts & hidden gems</div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--mu)">Spotify mode only. If no tracks match the filter, it falls back to any available track.</p>
+  </div>
+
+  <div class="panel">
+    <div class="sec">🚫 Artist Blacklist</div>
+    <p style="font-size:13px;line-height:1.7;color:var(--tx)">
+      Add artist names you never want to hear. The AI DJ will skip any track by a blacklisted artist when building recommendations.
+      The list resets when the server restarts (Render free tier restarts after ~15 min of inactivity).
+    </p>
+  </div>
+
+  <div class="panel">
+    <div class="sec">🎚 Mixer Tab — How It Works</div>
+    <p style="font-size:13px;line-height:1.7;color:var(--tx);margin-bottom:10px">
+      The Mixer lets you build a manual queue of songs and plays them as a continuous crossfaded mix.
+      Unlike AI DJ, you control exactly which songs play and in what order.
+    </p>
+
+    <div style="font-size:12px;color:var(--mu);line-height:1.9">
+      <div style="margin-bottom:6px"><span style="color:var(--tx);font-weight:700">1. Add songs</span> — search by name/artist, pick Spotify or YouTube, click <b>+ Add</b></div>
+      <div style="margin-bottom:6px"><span style="color:var(--tx);font-weight:700">2. Import playlists</span> — paste a Spotify or YouTube playlist URL. Duplicates across multiple imports are automatically removed</div>
+      <div style="margin-bottom:6px"><span style="color:var(--tx);font-weight:700">3. Set mix points</span> — each song has its own mix point dropdown (¼ → Full). Use <b>Set All</b> to apply the same setting to every song at once</div>
+      <div style="margin-bottom:6px"><span style="color:var(--tx);font-weight:700">4. Hit Play Mix</span> — songs play in order with automatic crossfades at each mix point</div>
+    </div>
+
+    <div style="background:#1a1400;border:1px solid #4a3800;border-radius:8px;padding:10px;margin-top:10px;font-size:12px;color:var(--w)">
+      💡 <b>Tip:</b> If you're connected to Spotify Premium, the Mixer plays <em>full songs</em> via the SDK.
+      Without login it uses 30-second previews. YouTube songs always stream full audio.
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="sec">📋 Playlist Import</div>
+    <div style="font-size:13px;line-height:1.7;color:var(--tx)">
+      Supports Spotify and YouTube playlist URLs:
+    </div>
+    <div style="margin:10px 0;font-size:12px;color:var(--mu)">
+      <div style="background:#0d0d0d;border:1px solid var(--b);border-radius:6px;padding:8px 12px;margin-bottom:6px;font-family:monospace">
+        https://open.spotify.com/playlist/37i9dQZF1DX6bnzK9KPvrz
+      </div>
+      <div style="background:#0d0d0d;border:1px solid var(--b);border-radius:6px;padding:8px 12px;font-family:monospace">
+        https://www.youtube.com/playlist?list=PLxxxxxx
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--mu)">
+      For Spotify playlists — connect your Spotify account first so the app can read them with your token.
+      Public playlists may work without login; private playlists always require it.
+      Up to 500 tracks per import.
+    </p>
+  </div>
+
+  <div class="panel">
+    <div class="sec">⌨️ Keyboard / Controls Reference</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <tbody>
+          <tr style="border-bottom:1px solid #1a1a1a"><td style="padding:7px 8px;color:var(--tx);width:140px">START DJ MIX</td><td style="padding:7px 8px;color:var(--mu)">Enter song + artist → click <b style="color:var(--tx)">START DJ MIX</b></td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a"><td style="padding:7px 8px;color:var(--tx)">⏸ PAUSE / ▶ RESUME</td><td style="padding:7px 8px;color:var(--mu)">Pause/resume current track. Crossfade timer is suspended.</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a"><td style="padding:7px 8px;color:var(--tx)">⏭ SKIP</td><td style="padding:7px 8px;color:var(--mu)">Instantly jump to the next recommended track</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a"><td style="padding:7px 8px;color:var(--tx)">■ STOP</td><td style="padding:7px 8px;color:var(--mu)">Stop and clear the mix entirely</td></tr>
+          <tr style="border-bottom:1px solid #1a1a1a"><td style="padding:7px 8px;color:var(--tx)">✏️ CHANGE</td><td style="padding:7px 8px;color:var(--mu)">Change the seed song mid-mix. The AI restarts recommendations from the new track</td></tr>
+          <tr><td style="padding:7px 8px;color:var(--tx)">VOL slider</td><td style="padding:7px 8px;color:var(--mu)">Adjust master volume. Works during crossfades.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:16px">
+    <div class="sec">❓ Troubleshooting</div>
+    <div style="font-size:12px;color:var(--mu);line-height:2">
+      <div><b style="color:var(--tx)">Song not found</b> — use the exact title as it appears on Spotify/YouTube. Try without "feat." or brackets.</div>
+      <div><b style="color:var(--tx)">429 Too Many Requests</b> — server is rate-limited by Spotify. Wait 30 seconds and try again.</div>
+      <div><b style="color:var(--tx)">Playlist shows 0 tracks</b> — connect Spotify first, then import. Private playlists need your token.</div>
+      <div><b style="color:var(--tx)">YouTube not playing</b> — audio stream may have expired (they last ~6 hours). Refreshing fixes it.</div>
+      <div><b style="color:var(--tx)">Second song skips instantly</b> — known edge case if preview is very short. Hit Skip to continue.</div>
+      <div><b style="color:var(--tx)">Blacklist resets</b> — free Render tier sleeps after 15 min. Restart clears server-side state.</div>
+    </div>
+  </div>
+
+</div><!-- /tab-help -->
+
 
 <script>
 // ════════════════════════════════════════════════
@@ -527,9 +709,9 @@ function clearErr(){ $('er').classList.remove('show'); }
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('act', t.dataset.tab===name));
   document.querySelectorAll('.pane').forEach(p => p.classList.toggle('act', p.id===`tab-${name}`));
-  // Stop the OTHER tab's playback when switching
-  if (name==='mixer' && running) { /* let DJ keep running in bg */ }
-  if (name==='dj'    && mxRunning) { /* let mixer keep running in bg */ }
+  // Stop the other tab's player when switching to avoid dual playback
+  if(name==='mixer' && running)  { djStop(); }
+  if(name==='dj'    && mxRunning){ mxStop(); }
 }
 
 // ════════════════════════════════════════════════
@@ -637,10 +819,15 @@ function makeMxPlayer(t) {
 //  DJ — SOURCE
 // ════════════════════════════════════════════════
 function setDJSrc(src) {
+  if(djSrc===src) return;
+  // Mute/pause current source before switching
+  if(djSrc==='spotify'&&sdk&&sdkOK) sdk.pause().catch(()=>{});
+  if(djSrc==='youtube') ytPause();
+  if(nowA){nowA.pause();}
   djSrc = src;
   $('dj-sp').classList.toggle('sel', src==='spotify');
   $('dj-yt').classList.toggle('sel', src==='youtube');
-  $('yt-embed-wrap').style.display = src==='youtube' ? 'block' : 'none';
+  if($('yt-embed-wrap')) $('yt-embed-wrap').style.display = src==='youtube' ? 'block' : 'none';
   if(running) djStop();
   if(src==='youtube') initYTPlayer();
 }
@@ -769,34 +956,40 @@ function setVol(v){ vol=v/100; if(isSDK())sdkVol(vol); if(nowA)nowA.volume=Math.
 //  DJ — CROSSFADE ENGINE
 // ════════════════════════════════════════════════
 async function tick(){
-  if(!running||paused||inXF||!nxtT)return;
-  if(Date.now()-advancedAt < 3000) return; // grace period after handoff
+  if(!running||paused)return;
+  // Always update progress bar (even during XF) — only skip trigger check
   if(isSDK()){
     try{
       const st=await sdk.getCurrentState();
-      if(!st||!st.duration||st.duration<2000)return;
+      if(!st||!st.duration)return;
       const pos=st.position,dur=st.duration;
       $('npb-fill').style.width=(pos/dur*100)+'%';
       $('npb-t1').textContent=fm(pos); $('npb-t2').textContent=fm(dur);
-      updateNPB(nowT,!st.paused);
-      const trig=mf>=1?dur-XF_SECS*1000:dur*mf-XF_SECS*500;
-      if(pos>=trig&&!mixFired)startXFade();
+      // Only trigger XF when: not already fired, not in XF, next track ready, past grace period
+      if(!mixFired&&!inXF&&nxtT&&dur>=2000&&Date.now()-advancedAt>3000){
+        const trig=mf>=1?dur-XF_SECS*1000:dur*mf-XF_SECS*500;
+        if(pos>=trig) startXFade();
+      }
     }catch{}
-  } else if(djSrc==='youtube') {
+  } else if(djSrc==='youtube'){
     const pos=ytGetPos(), dur=ytGetDur();
     if(!dur||dur<2) return;
     $('npb-fill').style.width=(pos/dur*100)+'%';
     $('npb-t1').textContent=fm(pos*1000); $('npb-t2').textContent=fm(dur*1000);
-    const trig=mf>=1?dur-XF_SECS:dur*mf-XF_SECS/2;
-    if(pos>=Math.max(0,trig)&&!mixFired) startXFade();
+    if(!mixFired&&!inXF&&nxtT&&Date.now()-advancedAt>3000){
+      const trig=mf>=1?dur-XF_SECS:dur*mf-XF_SECS/2;
+      if(pos>=Math.max(0,trig)) startXFade();
+    }
   } else if(nowA){
     if(nowA.paused)return;
     const dur=nowA.duration; if(!dur||isNaN(dur))return;
     const pos=nowA.currentTime;
     $('npb-fill').style.width=(pos/dur*100)+'%';
     $('npb-t1').textContent=fm(pos*1000); $('npb-t2').textContent=fm(dur*1000);
-    const trig=mf>=1?dur-XF_SECS:dur*mf-XF_SECS/2;
-    if(pos>=Math.max(0,trig)&&!mixFired)startXFade();
+    if(!mixFired&&!inXF&&nxtT&&Date.now()-advancedAt>3000){
+      const trig=mf>=1?dur-XF_SECS:dur*mf-XF_SECS/2;
+      if(pos>=Math.max(0,trig)) startXFade();
+    }
   }
 }
 
@@ -805,6 +998,32 @@ function startXFade(){
   $('xfv').textContent='⟷ CROSSFADING…'; $('xfv').classList.add('act');
   $('now-bdg').className='bdg bdg-mix'; $('now-bdg').textContent='MIXING OUT';
   $('now-tc').classList.remove('is-now'); $('now-tc').classList.add('is-mixing');
+
+  if(isSDK()){
+    // SDK: switch audio immediately — can only play one track at a time
+    sdkPlay(nxtT.uri).catch(()=>{});
+    // Update state & UI right now so card matches audio
+    hist.push(nowT); if(hist.length>20)hist.shift();
+    nowT=nxtT; nxtT=null; advancedAt=Date.now();
+    curSong=nowT.name; curArt=nowT.artist.split(',')[0].trim();
+    fillCard('now',nowT); $('now-bdg').className='bdg bdg-now'; $('now-bdg').textContent='NOW PLAYING';
+    $('now-tc').classList.remove('is-mixing'); $('now-tc').classList.add('is-now');
+    updateNPB(nowT,true); updateQueue();
+    // After XF_SECS fetch next recommendation
+    xfTimer=setTimeout(async()=>{
+      mixFired=false; inXF=false;
+      $('xfv').textContent=''; $('xfv').classList.remove('act');
+      $('nxt-bdg').className='bdg bdg-nxt'; $('nxt-bdg').textContent='UP NEXT';
+      try{
+        const d=await getRec(curSong,curArt);
+        nxtT=d.recommendation; fillCard('nxt',nxtT);
+        $('nxt-bdg').className='bdg bdg-nxt'; $('nxt-bdg').textContent='UP NEXT';
+      }catch(e){ nxtT=null; showErr(`Next: ${e.message}`); }
+    }, XF_SECS*1000);
+    return;
+  }
+
+  // Non-SDK: volume fade out, then doAdvance
   const steps=Math.round(XF_SECS*1000/TICK); let step=0;
   xfTimer=setInterval(()=>{
     step++; const p=step/steps;
@@ -815,42 +1034,33 @@ function startXFade(){
 }
 
 async function doAdvance(){
+  // Called only for non-SDK mode (SDK handles everything in startXFade)
   clearInterval(xfTimer); $('xfv').textContent=''; $('xfv').classList.remove('act');
-  // Destroy old track
   if(nowA){nowA.pause();nowA.src='';nowA=null;}
-  // Move next to now
   nowT=nxtT; nxtT=null;
   mixFired=false; inXF=false;
-  advancedAt=Date.now(); // set grace period so tick doesn't re-trigger instantly
+  advancedAt=Date.now();
   hist.push(nowT); if(hist.length>20)hist.shift();
-  // Update UI immediately
   fillCard('now',nowT); $('now-bdg').className='bdg bdg-now'; $('now-bdg').textContent='NOW PLAYING';
   $('now-tc').classList.remove('is-mixing'); $('now-tc').classList.add('is-now');
   $('nxt-bdg').className='bdg bdg-nxt'; $('nxt-bdg').textContent='UP NEXT';
   updateNPB(nowT,true); updateQueue();
-  // Start new track from 0 - get fresh audio (nxtA was preloaded but not played)
-  if(!isSDK()){
-    if(djSrc==='youtube'){
-      ytLoad(nowT.id); ytSetVol(vol); ytPlay();
-    } else if(nxtA){
-      nowA=nxtA; nxtA=null;
-      nowA.currentTime=0; nowA.volume=vol;
-      await nowA.play().catch(()=>{});
-    }
+  if(djSrc==='youtube'){
+    ytLoad(nowT.id); ytSetVol(vol); ytPlay();
+  } else if(nxtA){
+    nowA=nxtA; nxtA=null;
+    nowA.currentTime=0; nowA.volume=vol;
+    await nowA.play().catch(()=>{});
   }
   curSong=nowT.name; curArt=nowT.artist.split(',')[0].trim();
-  // Prefetch next recommendation
   try{
     const d=await getRec(curSong,curArt);
     nxtT=d.recommendation;
     fillCard('nxt',nxtT);
-    if(djSrc==='youtube'){
-      // Pre-load next video (paused) — will play after next crossfade
-      // No-op: IFrame handles queueing natively
-    } else if(!isSDK()&&nxtT.preview_url){
+    if(!isSDK()&&djSrc!=='youtube'&&nxtT.preview_url){
       nxtA=new Audio(nxtT.preview_url); nxtA.preload='auto'; nxtA.volume=0;
     }
-    if(isSDK()) await sdkPlay(nxtT.uri);
+    // NOTE: Do NOT call sdkPlay here — SDK plays nxtT at next startXFade
   }catch(e){ nxtT=null; showErr(`Next track error: ${e.message}`); }
 }
 
@@ -978,6 +1188,7 @@ let mxQueue = [], mxIdx=0;
 let mxRunning=false, mxPaused=false, mxFired=false, mxInXF=false;
 let mxNow=null, mxNxt=null, mxTickTimer=null;
 let mxVol=0.8, mxSrc='spotify';
+const mxUsesSDK = () => mxSrc==='spotify' && sdkOK && !!AT;
 
 // ════════════════════════════════════════════════
 //  MIXER YT IFRAME (dedicated player, separate from DJ)
@@ -1121,6 +1332,11 @@ function mxAddTracks(tracks){
   mxRenderQueue();
 }
 
+function mxSetAllMF(){
+  const v=parseFloat($('mx-all-mf').value);
+  mxQueue.forEach(t=>t.mf=v);
+  mxRenderQueue();
+}
 function mxRemove(i){ mxQueue.splice(i,1); if(mxIdx>i)mxIdx--; mxRenderQueue(); }
 function mxClear(){ if(mxRunning)mxStop(); mxQueue=[]; mxIdx=0; if($('mx-src-warn'))$('mx-src-warn').style.display='none'; mxRenderQueue(); }
 
@@ -1183,12 +1399,17 @@ async function mxStartPlay(){
 
   if(mxSrc==='youtube'){
     initMxYTPlayer();
-    // Small delay to let YT player init
     setTimeout(()=>{ mxYTLoad(t.id); mxYTSetVol(mxVol*100); setTimeout(()=>mxYTPlay(),400); },300);
+  } else if(mxUsesSDK()){
+    // Full song via Spotify SDK
+    await sdkVol(mxVol); await sdkPlay(t.uri||`spotify:track:${t.id}`);
+    mxUpdateNow(t);
   } else {
+    // Preview audio fallback
     if(!t.preview_url){
       try{ const d=await fetch(`/api/preview/${t.id}`).then(r=>r.json()); t.preview_url=d.preview_url; }catch{}
     }
+    if(!t.preview_url){ showErr(`No preview for "${t.name}" — connect Spotify for full songs`); }
     mxNow=await makeMxPlayer(t).init(); mxNow.setVol(mxVol); await mxNow.play();
     mxUpdateNow(t);
     mxPreloadNext();
@@ -1229,23 +1450,44 @@ function mxTick(){
     return;
   }
 
-  // ── Spotify audio mode ──
+  // ── Spotify mode: SDK (full songs) or preview audio ──
+  if(mxUsesSDK()){
+    // Full song via Spotify SDK
+    sdk.getCurrentState().then(st=>{
+      if(!st||!st.duration) return;
+      const pos=st.position, dur=st.duration;
+      const t=mxQueue[mxIdx]; const mft=t?.mf??0.5;
+      $('mx-fill').style.width=(pos/dur*100)+'%';
+      $('mx-t1').textContent=fm(pos); $('mx-t2').textContent=fm(dur);
+      if(!mxFired&&!mxInXF&&dur>=2000){
+        const trig=mft>=1?dur-MX_XF*1000:dur*mft-MX_XF*500;
+        if(pos>=trig){ mxFired=true; mxStartXFade(); }
+      }
+    }).catch(()=>{});
+    return;
+  }
   if(!mxNow)return;
   const pos=mxNow.pos, dur=mxNow.dur; if(!dur||dur<2||isNaN(dur))return;
   const t=mxQueue[mxIdx]; const mft=t?.mf??0.5;
-  // KEY FIX: use track's full duration_ms for trigger point, capped to actual audio length
-  // e.g. 3:32 track, mf=0.25 → trigger at 53s; but preview is 30s → cap at 30-4=26s
-  const trackDur = (t?.duration_ms||0)/1000 || dur;
-  const trig = mft>=1 ? dur-MX_XF : Math.min(dur-MX_XF, trackDur*mft - MX_XF/2);
+  const trig = mft>=1 ? dur-MX_XF : Math.max(1, dur*mft - MX_XF/2);
   $('mx-fill').style.width=(pos/dur*100)+'%';
   $('mx-t1').textContent=fm(pos*1000); $('mx-t2').textContent=fm(dur*1000);
-  if(pos>=Math.max(1,trig)&&!mxFired){ mxFired=true; mxStartXFade(); }
+  if(pos>=trig&&!mxFired){ mxFired=true; mxStartXFade(); }
 }
 
 async function mxStartXFade(){
   if(mxInXF)return; mxInXF=true;
   $('mx-xf').textContent='⟷ CROSSFADING…'; $('mx-xf').classList.add('act');
   if(mxIdx+1>=mxQueue.length){ mxEnd(); return; }
+
+  if(mxUsesSDK()){
+    // SDK: switch immediately, no true crossfade
+    const next=mxQueue[mxIdx+1];
+    await sdkPlay(next.uri||`spotify:track:${next.id}`);
+    mxAdvance();
+    return;
+  }
+
   const steps=Math.round(MX_XF*1000/MX_TK); let step=0;
   const iv=setInterval(()=>{
     step++; const p=step/steps;
@@ -1260,21 +1502,25 @@ async function mxAdvance(){
   mxIdx++; mxFired=false; mxInXF=false;
   if(mxIdx>=mxQueue.length){ mxEnd(); return; }
   const t=mxQueue[mxIdx];
+  mxUpdateNow(t); mxRenderQueue();
 
   if(mxSrc==='youtube'){
-    mxYTLoad(t.id); mxYTSetVol(mxVol*100); mxYTPlay();
-    mxRenderQueue();
-  } else {
-    mxNow?.destroy();
-    if(t.source==='spotify'&&!t.preview_url){
-      try{ const d=await fetch(`/api/preview/${t.id}`).then(r=>r.json()); t.preview_url=d.preview_url; }catch{}
-    }
-    if(mxNxt){ mxNow=mxNxt; mxNxt=null; }
-    else { mxNow=await makeMxPlayer(t).init(); }
-    mxNow.setVol(mxVol); await mxNow.play();
-    mxUpdateNow(t); mxRenderQueue();
-    mxPreloadNext();
+    // Already started in mxStartXFade
+    return;
   }
+  if(mxUsesSDK()){
+    // Already started in mxStartXFade via sdkPlay
+    return;
+  }
+  // Preview audio path
+  mxNow?.destroy();
+  if(t.source==='spotify'&&!t.preview_url){
+    try{ const d=await fetch(`/api/preview/${t.id}`).then(r=>r.json()); t.preview_url=d.preview_url; }catch{}
+  }
+  if(mxNxt){ mxNow=mxNxt; mxNxt=null; }
+  else { mxNow=await makeMxPlayer(t).init(); }
+  mxNow.setVol(mxVol); await mxNow.play();
+  mxPreloadNext();
 }
 
 function mxEnd(){
@@ -1312,8 +1558,9 @@ async function mxSkip(){
 
 function mxStop(){
   clearInterval(mxTickTimer); mxRunning=false; mxPaused=false; mxFired=false; mxInXF=false;
-  if(mxSrc==='youtube'){ mxYTPause(); }
-  if(mxNow){mxNow.destroy();mxNow=null;} if(mxNxt){mxNxt.destroy();mxNxt=null;}
+  if(mxSrc==='youtube') mxYTPause();
+  if(mxUsesSDK()&&sdk) sdk.pause().catch(()=>{});
+  if(mxNow){mxNow.destroy?.();mxNow=null;} if(mxNxt){mxNxt.destroy?.();mxNxt=null;}
   $('mx-pp').textContent='▶ Play Mix'; $('mx-stop').disabled=true; $('mx-skip').disabled=true;
   $('mx-xf').textContent=''; $('mx-fill').style.width='0';
   mxRenderQueue();

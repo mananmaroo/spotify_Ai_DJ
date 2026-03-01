@@ -264,6 +264,47 @@ input[type=range]{width:80px;accent-color:var(--g);background:none;border:none;p
   background:none;color:var(--mu);font-size:12px}
 .pop-btn:hover{border-color:var(--g);color:var(--tx)}
 .pop-btn.sel{background:var(--g);border-color:var(--g);color:#000;font-weight:700}
+
+/* ── SEEK BAR ─────────────────────────────────── */
+.mx-bar, .npb-bar { cursor: pointer; }
+.mx-bar:hover .mx-fill, .npb-bar:hover .npb-fill { filter: brightness(1.3); }
+
+/* ── RESPONSIVE / FULL SCREEN ─────────────────── */
+@media (max-width: 600px) {
+  .wrap { padding: 0 8px 80px; }
+  header { padding: 12px 8px 0; }
+  .tabs { padding: 0 8px; gap: 4px; }
+  .tab { padding: 8px 4px; font-size: 11px; }
+  .deck { grid-template-columns: 1fr; }
+  .tc { min-width: 0; }
+  .tc-img { width: 56px; height: 56px; }
+  .npb { padding: 8px 10px; }
+  .npb-art { display: none; }
+  .npb-ctrl { gap: 6px; }
+  .ctrl button { padding: 8px 12px; font-size: 12px; }
+  .mp-btns, .pop-btns { flex-wrap: wrap; gap: 4px; }
+  .mp-btn, .pop-btn { padding: 4px 8px; font-size: 11px; }
+  .mx-ctrl { flex-wrap: wrap; gap: 6px; }
+  .mx-ctrl .vol-row { margin-left: 0; width: 100%; }
+  .q-row { grid-template-columns: 24px 36px 1fr auto auto; gap: 6px; }
+  .q-mf { font-size: 10px; padding: 2px 4px; }
+  .mx-res-item { gap: 6px; }
+  .mx-res-img { width: 36px; height: 36px; }
+  .src-row { gap: 4px; }
+  .src-btn { padding: 6px 10px; font-size: 12px; }
+}
+
+@media (min-width: 1200px) {
+  .wrap { max-width: 860px; }
+  header { max-width: 860px; }
+  .tabs { max-width: 860px; }
+}
+
+@media (max-width: 400px) {
+  .logo { font-size: 18px; }
+  .deck { gap: 8px; }
+  .tc-name { font-size: 14px; }
+}
 </style>
 </head>
 <body>
@@ -426,7 +467,7 @@ input[type=range]{width:80px;accent-color:var(--g);background:none;border:none;p
       <div class="npb-a" id="npb-a">—</div>
       <div class="npb-pb">
         <span class="npb-t1" id="npb-t1">0:00</span>
-        <div class="npb-bar"><div class="npb-fill" id="npb-fill"></div></div>
+        <div class="npb-bar" id="npb-bar" onclick="djSeek(event)" title="Click to seek" style="cursor:pointer"><div class="npb-fill" id="npb-fill"></div></div>
         <span class="npb-t2" id="npb-t2">0:00</span>
       </div>
     </div>
@@ -505,7 +546,7 @@ input[type=range]{width:80px;accent-color:var(--g);background:none;border:none;p
     </div>
     <div class="mx-prog">
       <span class="mx-t" id="mx-t1">0:00</span>
-      <div class="mx-bar"><div class="mx-fill" id="mx-fill"></div></div>
+      <div class="mx-bar" id="mx-bar" onclick="mxSeek(event)" title="Click to seek"><div class="mx-fill" id="mx-fill"></div></div>
       <span class="mx-t" id="mx-t2">0:00</span>
     </div>
     <div class="mx-xf" id="mx-xf"></div>
@@ -801,9 +842,13 @@ function makeMxPlayer(t) {
     get pos() { return this._a?.currentTime || 0; },
     get dur() { return this._a?.duration || 0; },
     setVol(v) { if (this._a) this._a.volume = Math.max(0, Math.min(1, v)); },
-    play() {
+    playFresh() {
       if (this._a) { this._a.currentTime = 0; return this._a.play().catch(()=>{}); }
       return Promise.resolve();
+    },
+    play() {
+      // Resume from wherever it is (don't reset position)
+      return this._a ? this._a.play().catch(()=>{}) : Promise.resolve();
     },
     pause() { this._a?.pause(); },
     destroy() { if (this._a) { this._a.pause(); this._a.src = ''; this._a.load(); this._a = null; } },
@@ -946,6 +991,27 @@ function updateQueue(){
   hist.slice(-12).forEach(t=>{ const i=document.createElement('img'); i.className='qi'; i.src=t.image||''; i.title=`${t.name} — ${t.artist}`; qs.appendChild(i); });
 }
 function setVol(v){ vol=v/100; if(isSDK())sdkVol(vol); if(nowA)nowA.volume=Math.max(0,Math.min(1,v)); }
+
+function djSeek(e){
+  if(!running) return;
+  const bar=$('npb-bar');
+  const pct=(e.clientX-bar.getBoundingClientRect().left)/bar.offsetWidth;
+  const clamped=Math.max(0,Math.min(1,pct));
+  if(isSDK()){
+    sdk.getCurrentState().then(st=>{
+      if(!st||!st.duration) return;
+      fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${Math.floor(st.duration*clamped)}&device_id=${devId}`,
+        {method:'PUT',headers:{Authorization:`Bearer ${AT}`}}).catch(()=>{});
+    });
+  } else if(djSrc==='youtube'&&_ytPlayer&&_ytPlayerReady){
+    const dur=ytGetDur(); if(!dur) return;
+    _ytPlayer.seekTo(dur*clamped,true);
+  } else if(nowA){
+    const dur=nowA.duration; if(!dur||isNaN(dur)) return;
+    nowA.currentTime=dur*clamped;
+    if(nowA.currentTime < dur*mf - XF_SECS/2) mixFired=false;
+  }
+}
 
 // ════════════════════════════════════════════════
 //  DJ — CROSSFADE ENGINE
@@ -1395,7 +1461,7 @@ async function mxStartPlay(){
       try{ const d=await fetch(`/api/preview/${t.id}`).then(r=>r.json()); t.preview_url=d.preview_url; }catch{}
     }
     if(!t.preview_url){ showErr(`No preview for "${t.name}" — connect Spotify for full songs`); }
-    mxNow=await makeMxPlayer(t).init(); mxNow.setVol(mxVol); await mxNow.play();
+    mxNow=await makeMxPlayer(t).init(); mxNow.setVol(mxVol); await mxNow.playFresh();
     mxUpdateNow(t);
     mxPreloadNext();
   }
@@ -1493,7 +1559,8 @@ async function mxAdvance(){
   mxUpdateNow(t); mxRenderQueue();
 
   if(mxSrc==='youtube'){
-    // Already started in mxStartXFade
+    // Load and play the next track now
+    mxYTLoad(t.id); mxYTSetVol(mxVol*100); setTimeout(()=>mxYTPlay(),200);
     return;
   }
   if(mxUsesSDK()){
@@ -1507,18 +1574,23 @@ async function mxAdvance(){
   }
   if(mxNxt){ mxNow=mxNxt; mxNxt=null; }
   else { mxNow=await makeMxPlayer(t).init(); }
-  mxNow.setVol(mxVol); await mxNow.play();
+  mxNow.setVol(mxVol); await mxNow.playFresh();
   mxPreloadNext();
 }
 
 function mxEnd(){
+  clearInterval(mxTickTimer); clearInterval(mxXFTimer);
+  mxRunning=false; mxPaused=false; mxFired=false; mxInXF=false;
+  // Hard stop ALL audio
   if(mxSrc==='youtube') mxYTPause();
-  if(mxNow){mxNow.destroy();mxNow=null;} if(mxNxt){mxNxt.destroy();mxNxt=null;}
-  mxRunning=false; mxPaused=false;
-  clearInterval(mxTickTimer);
+  if(mxUsesSDK()&&sdk) sdk.pause().catch(()=>{});
+  if(mxNow && mxNow._a){ mxNow._a.pause(); mxNow._a.src=''; }
+  if(mxNxt && mxNxt._a){ mxNxt._a.pause(); mxNxt._a.src=''; }
+  mxNow=null; mxNxt=null;
   $('mx-pp').textContent='▶ Play Mix'; $('mx-stop').disabled=true; $('mx-skip').disabled=true;
-  $('mx-name').textContent='Mix complete 🎉'; $('mx-aname').textContent='—';
-  $('mx-fill').style.width='100';
+  $('mx-xf').textContent=''; $('mx-xf').classList.remove('act');
+  $('mx-name').textContent='Mix complete 🎉'; $('mx-aname').textContent='';
+  $('mx-fill').style.width='0';
 }
 
 async function mxSkip(){
@@ -1553,7 +1625,7 @@ async function mxSkip(){
       try{ const d=await fetch(`/api/preview/${t.id}`).then(r=>r.json()); t.preview_url=d.preview_url; }catch{}
     }
     mxNow=await makeMxPlayer(t).init();
-    mxNow.setVol(mxVol); await mxNow.play();
+    mxNow.setVol(mxVol); await mxNow.playFresh();
     mxPreloadNext();
   }
   mxUpdateNow(t); mxRenderQueue();
@@ -1573,6 +1645,31 @@ function mxStop(){
 
 
 function mxSetVol(v){ mxVol=v/100; if(mxSrc==='youtube') mxYTSetVol(mxVol*100); else mxNow?.setVol(mxVol); }
+
+function mxSeek(e){
+  if(!mxRunning) return;
+  const bar=$('mx-bar');
+  const pct=(e.clientX-bar.getBoundingClientRect().left)/bar.offsetWidth;
+  const clamped=Math.max(0,Math.min(1,pct));
+  if(mxSrc==='youtube' && _mxYT && _mxYTReady){
+    const dur=mxYTGetDur(); if(!dur) return;
+    _mxYT.seekTo(dur*clamped, true);
+  } else if(mxUsesSDK()&&sdk){
+    sdk.getCurrentState().then(st=>{
+      if(!st||!st.duration) return;
+      const ms=Math.floor(st.duration*clamped);
+      fetch(`https://api.spotify.com/v1/me/player/seek?position_ms=${ms}&device_id=${devId}`,
+        {method:'PUT',headers:{Authorization:`Bearer ${AT}`}}).catch(()=>{});
+    });
+  } else if(mxNow&&mxNow._a){
+    const dur=mxNow._a.duration; if(!dur||isNaN(dur)) return;
+    mxNow._a.currentTime=dur*clamped;
+    // After seek, reset mxFired if we moved backward past the trigger
+    const t=mxQueue[mxIdx]; const mft=t?.mf??0.5;
+    const trig=mft>=1?dur-MX_XF:Math.max(1,dur*mft-MX_XF/2);
+    if(mxNow._a.currentTime < trig) mxFired=false;
+  }
+}
 
 function mxUpdateNow(t){
   $('mx-art').src=t.image||''; $('mx-name').textContent=t.name; $('mx-aname').textContent=t.artist;

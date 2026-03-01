@@ -461,7 +461,7 @@ input[type=range]{width:80px;accent-color:var(--g);background:none;border:none;p
 
   <!-- IMPORT PLAYLIST -->
   <div class="panel">
-    <div class="sec">📋 Import Playlist <span class="chip" id="mx-pl-chip">Spotify or YouTube — duplicates auto-removed</span></div>
+    <div class="sec">📋 Import Playlist <span class="chip" id="mx-pl-chip">YouTube playlists supported — Spotify coming soon</span></div>
     <div class="pl-row">
       <input id="pl-url" type="text" placeholder="Paste Spotify or YouTube playlist URL…" class="pl-in"/>
       <button class="mx-btn" id="pl-btn" onclick="mxImport()">Import</button>
@@ -646,20 +646,15 @@ input[type=range]{width:80px;accent-color:var(--g);background:none;border:none;p
   <div class="panel">
     <div class="sec">📋 Playlist Import</div>
     <div style="font-size:13px;line-height:1.7;color:var(--tx)">
-      Supports Spotify and YouTube playlist URLs:
+      YouTube playlist URLs are supported. Spotify playlist support is coming soon.
     </div>
     <div style="margin:10px 0;font-size:12px;color:var(--mu)">
-      <div style="background:#0d0d0d;border:1px solid var(--b);border-radius:6px;padding:8px 12px;margin-bottom:6px;font-family:monospace">
-        https://open.spotify.com/playlist/37i9dQZF1DX6bnzK9KPvrz
-      </div>
       <div style="background:#0d0d0d;border:1px solid var(--b);border-radius:6px;padding:8px 12px;font-family:monospace">
         https://www.youtube.com/playlist?list=PLxxxxxx
       </div>
     </div>
     <p style="font-size:12px;color:var(--mu)">
-      For Spotify playlists — connect your Spotify account first so the app can read them with your token.
-      Public playlists may work without login; private playlists always require it.
-      Up to 500 tracks per import.
+      Up to 300 tracks per import. No login required for public YouTube playlists.
     </p>
   </div>
 
@@ -811,7 +806,7 @@ function makeMxPlayer(t) {
       return Promise.resolve();
     },
     pause() { this._a?.pause(); },
-    destroy() { if (this._a) { this._a.pause(); this._a.src = ''; this._a = null; } },
+    destroy() { if (this._a) { this._a.pause(); this._a.src = ''; this._a.load(); this._a = null; } },
   };
 }
 
@@ -1186,7 +1181,8 @@ const MX_XF  = 4;
 const MX_TK  = 300;
 let mxQueue = [], mxIdx=0;
 let mxRunning=false, mxPaused=false, mxFired=false, mxInXF=false;
-let mxNow=null, mxNxt=null, mxTickTimer=null;
+let mxNow=null, mxNxt=null, mxTickTimer=null, mxXFTimer=null;
+let mxSeq=0; // incremented on every skip/stop/start — stale preloads abort
 let mxVol=0.8, mxSrc='spotify';
 const mxUsesSDK = () => mxSrc==='spotify' && sdkOK && !!AT;
 
@@ -1227,18 +1223,6 @@ function mxYTGetDur()      { return _mxYT?.getDuration?.() || 0; }
 
 // ════════════════════════════════════════════════
 //  MIXER — PLAYER ABSTRACTION (Spotify audio)
-// ════════════════════════════════════════════════
-class MxAudio {
-  constructor(url){ this._a=url?new Audio(url):null; if(this._a){this._a.preload='auto';this._a.volume=0;} }
-  get pos(){ return this._a?.currentTime||0; }
-  get dur(){ return this._a?.duration||0; }
-  setVol(v){ if(this._a)this._a.volume=Math.max(0,Math.min(1,v)); }
-  play(){ if(this._a){this._a.currentTime=0;return this._a.play().catch(()=>{});}return Promise.resolve(); }
-  pause(){ this._a?.pause(); }
-  destroy(){ if(this._a){this._a.pause();this._a.src='';} }
-}
-
-
 
 // ════════════════════════════════════════════════
 //  MIXER — SEARCH + IMPORT
@@ -1392,6 +1376,7 @@ async function mxPP(){
 }
 
 async function mxStartPlay(){
+  mxSeq++;
   mxRunning=true; mxPaused=false; mxFired=false; mxInXF=false;
   $('mx-pp').textContent='⏸ Pause';
   $('mx-stop').disabled=false; $('mx-skip').disabled=false;
@@ -1421,16 +1406,19 @@ async function mxStartPlay(){
 
 async function mxPreloadNext(){
   if(mxIdx+1>=mxQueue.length)return;
+  const seq=mxSeq; // snapshot — if mxSeq changes before we finish, we're stale
   const nt=mxQueue[mxIdx+1];
   if(nt.source==='spotify'&&!nt.preview_url){
     try{ const d=await fetch(`/api/preview/${nt.id}`).then(r=>r.json()); nt.preview_url=d.preview_url; }catch{}
   }
-  // Init player but DON'T play yet — prevents skip bug
+  if(seq!==mxSeq)return; // stale — skip/stop happened while we were awaiting
   if(nt.source==='youtube'){
-    getYTAudioUrl(nt.id).catch(()=>{}); // just pre-cache the URL
-    mxNxt = null; // will create fresh in mxAdvance
+    getYTAudioUrl(nt.id).catch(()=>{});
+    mxNxt=null;
   } else {
-    mxNxt = await makeMxPlayer(nt).init(); // preloaded but silent
+    const p=await makeMxPlayer(nt).init();
+    if(seq!==mxSeq){ p.destroy(); return; } // became stale during init — kill the audio
+    mxNxt=p;
   }
 }
 
@@ -1489,11 +1477,11 @@ async function mxStartXFade(){
   }
 
   const steps=Math.round(MX_XF*1000/MX_TK); let step=0;
-  const iv=setInterval(()=>{
+  mxXFTimer=setInterval(()=>{
     step++; const p=step/steps;
     if(mxSrc==='youtube') mxYTSetVol(mxVol*(1-p)*100);
     else mxNow?.setVol(mxVol*(1-p));
-    if(step>=steps){ clearInterval(iv); mxAdvance(); }
+    if(step>=steps){ clearInterval(mxXFTimer); mxAdvance(); }
   },MX_TK);
 }
 
@@ -1534,30 +1522,47 @@ function mxEnd(){
 }
 
 async function mxSkip(){
-  if(!mxRunning||mxInXF)return;
+  if(!mxRunning)return;
   if(mxIdx+1>=mxQueue.length){ mxEnd(); return; }
-  clearInterval(mxTickTimer); mxFired=false; mxInXF=false;
+
+  mxSeq++; // invalidate any in-flight mxPreloadNext calls
+  // ── HARD STOP everything currently playing ──
+  clearInterval(mxTickTimer);
+  clearInterval(mxXFTimer);
+  mxFired=false; mxInXF=false;
+
+  // Nuclear kill on current audio — don't rely on destroy() alone
+  if(mxNow && mxNow._a){ mxNow._a.pause(); mxNow._a.src=''; mxNow._a.load(); }
+  if(mxNxt && mxNxt._a){ mxNxt._a.pause(); mxNxt._a.src=''; mxNxt._a.load(); }
+  mxNow=null; mxNxt=null;
+
+  if(mxUsesSDK()&&sdk) sdk.pause().catch(()=>{});
+  if(mxSrc==='youtube') mxYTPause();
+
+  $('mx-xf').textContent=''; $('mx-xf').classList.remove('act');
+
   mxIdx++;
   const t=mxQueue[mxIdx];
 
   if(mxSrc==='youtube'){
-    mxYTLoad(t.id); mxYTSetVol(mxVol*100); mxYTPlay();
-    mxRenderQueue();
+    setTimeout(()=>{ mxYTLoad(t.id); mxYTSetVol(mxVol*100); mxYTPlay(); },100);
+  } else if(mxUsesSDK()){
+    await sdkVol(mxVol); await sdkPlay(t.uri||`spotify:track:${t.id}`);
   } else {
-    mxNow?.destroy(); mxNow=null; mxNxt?.destroy(); mxNxt=null;
     if(!t.preview_url){
       try{ const d=await fetch(`/api/preview/${t.id}`).then(r=>r.json()); t.preview_url=d.preview_url; }catch{}
     }
     mxNow=await makeMxPlayer(t).init();
     mxNow.setVol(mxVol); await mxNow.play();
-    mxUpdateNow(t); mxRenderQueue();
     mxPreloadNext();
   }
+  mxUpdateNow(t); mxRenderQueue();
   mxTickTimer=setInterval(mxTick,MX_TK);
 }
 
 function mxStop(){
-  clearInterval(mxTickTimer); mxRunning=false; mxPaused=false; mxFired=false; mxInXF=false;
+  mxSeq++;
+  clearInterval(mxTickTimer); clearInterval(mxXFTimer); mxRunning=false; mxPaused=false; mxFired=false; mxInXF=false;
   if(mxSrc==='youtube') mxYTPause();
   if(mxUsesSDK()&&sdk) sdk.pause().catch(()=>{});
   if(mxNow){mxNow.destroy?.();mxNow=null;} if(mxNxt){mxNxt.destroy?.();mxNxt=null;}

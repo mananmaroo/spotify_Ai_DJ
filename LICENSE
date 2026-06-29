@@ -1,22 +1,28 @@
-Copyright (c) 2024-present Manan Maroo (mikrocosmos). All Rights Reserved.
+MIT Non-Commercial License
 
-This software and associated documentation files (the "Software") are the
-exclusive property of Manan Maroo. Unauthorized copying, distribution,
-modification, sublicensing, or commercial use of this Software, in whole
-or in part, without the express written permission of the owner is strictly
-prohibited.
+Copyright (c) 2024-present Manan Maroo (mikrocosmos)
 
-PERMISSIONS GRANTED:
-- Viewing and studying the source code for personal, educational, or
-  non-commercial research purposes.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to use,
+copy, modify, merge, and distribute the Software for PERSONAL and
+NON-COMMERCIAL purposes only, subject to the following conditions:
 
-PERMISSIONS REQUIRING WRITTEN CONSENT:
-- Any commercial use, sale, or monetization of this Software or derivatives.
-- Redistribution or sublicensing to third parties.
-- Use in any product or service offered to external users.
+1. The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
 
-To inquire about commercial licensing, partnerships, or acquisition:
-  Email: maroomanan@gmail.com
-  GitHub: https://github.com/mananmaroo
+2. COMMERCIAL USE RESTRICTION: Any use of the Software for commercial purposes
+   — including but not limited to: incorporating into a paid product or service,
+   using in a business context, or generating revenue directly or indirectly —
+   requires prior written permission from the copyright holder.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+   To request commercial licensing:
+   Email: maroomanan@gmail.com
+   GitHub: https://github.com/mananmaroo
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

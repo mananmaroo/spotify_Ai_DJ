@@ -1,79 +1,18 @@
-# AI Year-Wise DJ
+# Spotify AI DJ
 
-Backend prototype for an **AI DJ brain** that creates smooth transitions between Spotify tracks released in the same year.
+A full-stack **AI music mix engine** for Spotify and YouTube: configurable mix points, popularity filtering, artist blacklisting, and dynamic queue reordering.
 
-## What this backend does
+**Live:** https://spotify-ai-dj.onrender.com/
 
-- Searches tracks using song + artist via Spotify Web API.
-- Fetches audio features + audio analysis for candidate tracks.
-- Builds section-level energy fingerprints from Spotify analysis.
-- Finds the best transition match between the currently playing track and next candidate songs.
+## Tech Stack
+Python · FastAPI · Spotify API · React
 
-## Quick start
+## Features
+- Configurable mix points for DJ-style transitions
+- Popularity filtering and artist blacklisting
+- Dynamic queue reordering across Spotify and YouTube
 
-1. Create and activate a virtual environment.
-2. Install dependencies:
+## License
 
-```bash
-pip install -e .
-```
+Licensed under the **MIT Non-Commercial License** — see [LICENSE](LICENSE). Personal and non-commercial use only; commercial use requires prior written permission (maroomanan@gmail.com).
 
-3. Create local secrets file from the example:
-
-```bash
-cp .env.example .env
-```
-
-4. Fill `.env` with Spotify credentials (`SPOTIPY_CLIENT_ID`, `SPOTIPY_CLIENT_SECRET`).
-
-5. Run the CLI with a starting track search query (recommended):
-
-```bash
-python -m ai_year_wise_dj.app --seed-query "Blinding Lights" --year 2020 --window 5
-```
-
-You can also run with an explicit track id:
-
-```bash
-python -m ai_year_wise_dj.app --seed-track-id <spotify_track_id> --year 2018 --window 5
-```
-
-## Notes
-
-- `.env` is ignored by git to prevent secret leakage; only `.env.example` is tracked.
-- API search only requires song name and artist from the user.
-- Matching currently uses section-level energy + tempo + loudness heuristics.
-- Playback control hooks are represented as interfaces/placeholders for frontend or scheduler integration.
-
-## GitHub Actions secrets
-
-This project already reads `SPOTIPY_CLIENT_ID` and `SPOTIPY_CLIENT_SECRET` from environment variables.
-So if you add them as repository secrets, GitHub Actions can pass them in automatically.
-
-- Workflow file: `.github/workflows/ci.yml`
-- Job `test`: runs unit tests and compile checks (no secrets required).
-- Job `spotify-smoke-check`: optional manual run (`workflow_dispatch`) that maps repository secrets into env vars and executes the CLI.
-
-> Note: GitHub Pages is static hosting, so it will **not** run this Python backend by itself.
-> Use GitHub Actions, a server host (Render/Railway/Fly/EC2), or a container platform for runtime execution.
-
-## Render next steps (recommended)
-
-Since this project is currently a CLI backend (not a web server), deploy it on Render as a **Background Worker**.
-
-1. Push this repo to GitHub.
-2. In Render, create a new service from this repo using `render.yaml`.
-3. In Render environment variables, set:
-   - `SPOTIPY_CLIENT_ID`
-   - `SPOTIPY_CLIENT_SECRET`
-   - `START_TRACK_QUERY` (for example: `Blinding Lights`)
-   - Optional tuning vars: `TARGET_YEAR`, `YEAR_WINDOW`, `TRACK_LIMIT`
-4. Deploy and check worker logs for output from `python -m ai_year_wise_dj.app ...`.
-
-Render start command can be minimal now:
-`python -m ai_year_wise_dj.app --seed-query "${START_TRACK_QUERY}"`
-(`TARGET_YEAR`, `YEAR_WINDOW`, and `TRACK_LIMIT` are read from env).
-
-### Important
-- If you need a live endpoint for a frontend, next step is to add a small API service (e.g., FastAPI) and deploy it as a **Web Service** on Render.
-- `render.yaml` currently targets worker execution of the CLI matcher.
